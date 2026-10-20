@@ -22,12 +22,17 @@ Third-party components
    License: GPL-2.0
    Used: LKM source at build time; ksud / Manager-release are official CI artifacts.
 
-5. Miuix
+5. SukiSU Ultra
+   Source: https://github.com/SukiSU-Ultra/SukiSU-Ultra
+   License: GPL-3.0
+   Used: LKM source at build time; ksud / manager are upstream release artifacts.
+
+6. Miuix
    Source: https://github.com/miuix-kotlin-multiplatform/miuix
    License: Apache-2.0
    Used: Compose UI components.
 
-6. Shizuku API
+7. Shizuku API
    Source: https://github.com/RikkaApps/Shizuku-API
    License: Apache-2.0
    Used: remote process execution.

@@ -11,6 +11,7 @@
 - **KernelSU（官方 v3.3.1）**：真机跑通，模块 Live、`su` uid 0、管理器加冕、Enforcing 下可用。
 - **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器均对齐官方 CI `v4.2.0-rc3 (35235)`，真机加载成功。
 - **KernelSU Next**：LKM 已按同版本 GKI 编译并在 App 中可选，尚未做实机加载验证。
+- **SukiSU Ultra**：LKM 已按 6.18.21 自编（445,200 B），管理器 v4.2.1 (40994)，尚未做实机加载验证。
 - App 支持三种 root 管理器下拉选择；release 签名 APK 已构建。
 
 ## 截图
@@ -121,7 +122,7 @@ cd app
 cp keystore.properties.example keystore.properties   # 填入自己的签名信息
 # local.properties 里写 sdk.dir=/path/to/android-sdk
 ./gradlew :app:assembleDebug
-./gradlew :app:assembleRelease   # R8 + 资源压缩，约 22 MB
+./gradlew :app:assembleRelease   # R8 + 资源压缩，约 26 MB
 ```
 
 `keystore.properties`、`keystore/`、`*.jks`、`local.properties` 已被 `.gitignore` 排除。生成 release 密钥示例：
@@ -191,6 +192,7 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 - 官方 KernelSU：[tiann/KernelSU](https://github.com/tiann/KernelSU)（GPL-2.0）。
 - KernelSU Next：[rifsxd/KernelSU-Next](https://github.com/rifsxd/KernelSU-Next)（GPL-2.0）。
 - BakaSU（原 ReSukiSU）：[Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU)（GPL-2.0）。
+- SukiSU Ultra：[SukiSU-Ultra/SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)（GPL-3.0）。
 - UI：[Miuix](https://github.com/miuix-kotlin-multiplatform/miuix)（Apache-2.0）；远程执行：[Shizuku API](https://github.com/RikkaApps/Shizuku-API)（Apache-2.0）。
 - 本项目自研代码（App、exploit 封装、构建脚本）采用 MIT，详见 `LICENSE`；第三方二进制与源码遵循各自许可，详见 `NOTICE`。
 

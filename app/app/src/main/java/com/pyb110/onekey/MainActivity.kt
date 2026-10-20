@@ -650,7 +650,8 @@ class MainActivity : ComponentActivity() {
     private enum class ManagerKind(val fullLabel: String, val pkg: String, val manager: String) {
         KERNELSU("KernelSU", "me.weishu.kernelsu", "kernelsu"),
         NEXT("KernelSU Next", "com.rifsxd.ksunext", "next"),
-        BAKASU("BakaSU", "com.resukisu.resukisu", "bakasu")
+        BAKASU("BakaSU", "com.resukisu.resukisu", "bakasu"),
+        SUKISU("SukiSU Ultra", "com.sukisu.ultra", "sukisu")
     }
 
     companion object {
@@ -658,7 +659,8 @@ class MainActivity : ComponentActivity() {
         private val ASSETS = listOf(
             "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2",
             "forker", "ksud_official", "ksu-base.ko", "syms.txt", "take_slide.sh", "run.sh",
-            "ksud_next", "ksu-base-next.ko", "ksud_bakasu", "ksu-base-bakasu.ko"
+            "ksud_next", "ksu-base-next.ko", "ksud_bakasu", "ksu-base-bakasu.ko",
+            "ksud_sukisu", "ksu-base-sukisu.ko"
         )
     }
 }
