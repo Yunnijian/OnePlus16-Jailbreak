@@ -34,11 +34,17 @@ BakaSU 模块编译时开启了多管理器支持（签名白名单包含官方 
 
 OnePlus 16 Jailbreak 首页：Shizuku 已授权；管理器选择 BakaSU（v4.2.0-rc3 / 35235）；反 root 安全弹窗开关开启；下方是内核版本、设备型号、系统指纹与 SELinux 状态。
 
-### 4. 管理器下拉选择
+### 4. SukiSU Ultra 管理器
+
+![SukiSU Ultra 管理器](docs/screenshots/sukisu-manager.jpg)
+
+SukiSU Ultra 管理器与 LKM：工作中 [LKM] [自定义] [越狱模式]，模块版本 41027-5、管理器 v4.2.1 (40994-5)，钩子类型 Tracepoint Syscall Redirect。
+
+### 5. 管理器下拉选择
 
 ![管理器下拉](docs/screenshots/app-manager-dropdown.jpg)
 
-KernelSU / KernelSU Next / BakaSU 三个管理器，当前选中 BakaSU（勾选）。
+KernelSU / KernelSU Next / BakaSU / SukiSU Ultra 四个管理器，当前选中 SukiSU Ultra（勾选）。
 
 ## 工作原理
 
