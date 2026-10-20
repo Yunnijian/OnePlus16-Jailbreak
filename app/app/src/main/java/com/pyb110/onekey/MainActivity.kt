@@ -631,8 +631,20 @@ class MainActivity : ComponentActivity() {
         val p = service.newProcess(cmd, env, dir)
         val out = ParcelFileDescriptor.AutoCloseInputStream(p.getInputStream())
         val err = ParcelFileDescriptor.AutoCloseInputStream(p.getErrorStream())
-        val t1 = Thread { out.bufferedReader().forEachLine { addLog(it) } }.apply { isDaemon = true; start() }
-        val t2 = Thread { err.bufferedReader().forEachLine { addLog(it) } }.apply { isDaemon = true; start() }
+        val t1 = Thread {
+            try {
+                out.bufferedReader().forEachLine { addLog(it) }
+            } catch (t: Throwable) {
+                // stream closed by waitFor() cleanup
+            }
+        }.apply { isDaemon = true; start() }
+        val t2 = Thread {
+            try {
+                err.bufferedReader().forEachLine { addLog(it) }
+            } catch (t: Throwable) {
+                // stream closed by waitFor() cleanup
+            }
+        }.apply { isDaemon = true; start() }
         val rc = p.waitFor()
         runCatching { out.close() }
         runCatching { err.close() }
