@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""把 .ko 里 SHN_UNDEF 的符号改写成 SHN_ABS + 从 kallsyms 取到的绝对地址。
+
+原理：内核 simplify_symbols() 对 st_shndx==SHN_ABS 的符号 `break`（直接用 st_value），
+只有 SHN_UNDEF 才会去 ksymtab 里按名字找导出符号。所以把未导出符号标成 ABS，
+就能让模块直接跳到内核里的真实地址。
+
+用法: ko_patchsyms.py <in.ko> <out.ko> <kallsyms.txt>
+"""
+import struct
+import sys
+from elftools.elf.elffile import ELFFile
+
+SHN_UNDEF = 0
+SHN_ABS = 0xfff1
+
+
+def load_kallsyms(path):
+    table = {}
+    for line in open(path, encoding='utf-8', errors='replace'):
+        p = line.split()
+        if len(p) < 3:
+            continue
+        try:
+            addr = int(p[0], 16)
+        except ValueError:
+            continue
+        name = p[2]
+        if name not in table or table[name] == 0:
+            table[name] = addr
+    return table
+
+
+def main(src, dst, ksym_path):
+    ksym = load_kallsyms(ksym_path)
+    print('kallsyms symbols:', len(ksym))
+
+    raw = bytearray(open(src, 'rb').read())
+    e = ELFFile(open(src, 'rb'))
+
+    symtab = None
+    for sec in e.iter_sections():
+        if sec.name == '.symtab':
+            symtab = sec
+            break
+    if symtab is None:
+        print('no .symtab'); return 1
+
+    entsize = symtab['sh_entsize']
+    base = symtab['sh_offset']
+    n = symtab['sh_size'] // entsize
+    strtab = e.get_section(symtab['sh_link']).data()
+
+    patched = 0
+    missing = []
+    for i in range(1, n):
+        off = base + i * entsize
+        st_name, st_info, st_other, st_shndx, st_value, st_size = \
+            struct.unpack_from('<IBBHQQ', raw, off)
+        if st_shndx != SHN_UNDEF or st_name == 0:
+            continue
+        name = strtab[st_name:strtab.find(b'\x00', st_name)].decode('latin1')
+        addr = ksym.get(name)
+        if addr is None or addr == 0:
+            missing.append(name)
+            continue
+        struct.pack_into('<H', raw, off + 6, SHN_ABS)     # st_shndx
+        struct.pack_into('<Q', raw, off + 8, addr)       # st_value
+        patched += 1
+
+    open(dst, 'wb').write(bytes(raw))
+    print('patched %d undefined symbols -> SHN_ABS' % patched)
+    if missing:
+        print('STILL MISSING (%d): %s' % (len(missing), ', '.join(missing[:20])))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1], sys.argv[2], sys.argv[3]))

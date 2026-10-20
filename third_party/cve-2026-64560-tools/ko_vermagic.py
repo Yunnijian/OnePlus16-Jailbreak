@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""把 .ko 的 vermagic 改成目标内核的 VERMAGIC_STRING。
+
+做法（不新增 section，最省事的 ELF 手术）：
+  1. 读出 .modinfo 原内容，把其中的 "vermagic=" 改名为 "zermagic="（内核就不再认它）；
+  2. 在末尾追加 "vermagic=<正确字符串>\\0"；
+  3. 把这段新内容放到文件尾，并把 .modinfo 的 sh_offset/sh_size 指过去。
+内核的 find_sec(".modinfo") 是按 section header 的 offset 取数据的，所以这样即生效。
+"""
+import struct
+import sys
+from elftools.elf.elffile import ELFFile
+
+VERMAGIC = (b'6.18.21-android17-5-g1d099fcb35e0-abogki540753930-4k '
+            b'SMP preempt mod_unload modversions aarch64')
+
+
+def patch(src, dst):
+    raw = open(src, 'rb').read()
+    e = ELFFile(open(src, 'rb'))
+    sec = e.get_section_by_name('.modinfo')
+    if sec is None:
+        print('no .modinfo'); return 1
+    off, size = sec['sh_offset'], sec['sh_size']
+    idx = next(i for i, x in enumerate(e.iter_sections()) if x.name == '.modinfo')
+    blob = raw[off:off + size]
+    old = blob.find(b'vermagic=')
+    print('old vermagic:', blob[old:blob.find(b'\x00', old)])
+    blob = blob.replace(b'vermagic=', b'zermagic=')
+    new_blob = blob + b'vermagic=' + VERMAGIC + b'\x00'
+
+    data = bytearray(raw)
+    new_off = len(data)
+    data += new_blob
+    hdr = e['e_shoff'] + idx * e['e_shentsize']
+    struct.pack_into('<Q', data, hdr + 0x18, new_off)        # sh_offset
+    struct.pack_into('<Q', data, hdr + 0x20, len(new_blob))  # sh_size
+    open(dst, 'wb').write(bytes(data))
+    print('new vermagic: vermagic=' + VERMAGIC.decode())
+    print('wrote %s (%d -> %d bytes, .modinfo %#x -> %#x @%#x)'
+          % (dst, len(raw), len(data), size, len(new_blob), new_off))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(patch(sys.argv[1], sys.argv[2]))

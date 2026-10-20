@@ -1,0 +1,35 @@
+Third-party components
+======================
+
+1. CVE-2026-64560 public tooling
+   Source: https://github.com/Feng1586/CVE-2026-64560-public
+   License: Apache-2.0
+   Used: t64560_v36 / t64560_loader2 / forker binaries (packed in App assets),
+         selected upstream scripts under third_party/.
+
+2. KernelSU
+   Source: https://github.com/tiann/KernelSU
+   License: GPL-2.0
+   Used: LKM source at build time; ksud and manager are distributed by upstream.
+
+3. KernelSU Next
+   Source: https://github.com/rifsxd/KernelSU-Next
+   License: GPL-2.0
+   Used: LKM source at build time; ksud / manager are upstream artifacts.
+
+4. BakaSU (formerly ReSukiSU)
+   Source: https://github.com/Baka-SU/BakaSU
+   License: GPL-2.0
+   Used: LKM source at build time; ksud / Manager-release are official CI artifacts.
+
+5. Miuix
+   Source: https://github.com/miuix-kotlin-multiplatform/miuix
+   License: Apache-2.0
+   Used: Compose UI components.
+
+6. Shizuku API
+   Source: https://github.com/RikkaApps/Shizuku-API
+   License: Apache-2.0
+   Used: remote process execution.
+
+The application icon is drawn by this project.

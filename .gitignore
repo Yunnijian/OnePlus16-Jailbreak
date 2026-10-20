@@ -1,0 +1,23 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+.kotlin/
+*.apk
+*.aab
+
+# Signing (never commit)
+keystore.properties
+keystore/
+*.jks
+*.keystore
+
+# IDE
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Build output
+out/

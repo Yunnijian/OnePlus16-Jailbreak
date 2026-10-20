@@ -1,0 +1,79 @@
+"""ko_patch_noenforce.py —— 把 KSU 模块 init 里那句
+    if (!getenforce()) { pr_info("Permissive SELinux, enforcing"); setenforce(true); }
+的 `bl setenforce` 改成 NOP，模块加载后不再把 SELinux 拉回 Enforcing。
+
+为什么需要：
+  * 我们靠单步写把 SELinux 做成 Permissive，好让 kprobe / 属性区可写；
+  * KSU 在 kernelsu_init() 里一旦发现是 Permissive 就主动 setenforce(true)，
+    于是随后 `resetprop`（写 /dev/__properties__）和 `kill adbd` 全被 LSM 拒掉。
+
+定位依据（Next v3.4.2 a17-6.18）：
+    .rela.init.text 里 r_offset=0x148 的重定位目标是 setenforce
+    对应指令 0x148: bl setenforce
+    前一条 0x144: mov w0, #1
+只改这一条 + 它的重定位（改成 R_AARCH64_NONE），其余不动。
+
+用法: ko_patch_noenforce.py <in.ko> <out.ko>
+"""
+import struct
+import sys
+from elftools.elf.elffile import ELFFile
+from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM
+
+NOP = 0xD503201F
+R_AARCH64_NONE = 0
+
+
+def main():
+    if len(sys.argv) < 3:
+        print(__doc__)
+        return 2
+    src, dst = sys.argv[1], sys.argv[2]
+    raw = bytearray(open(src, 'rb').read())
+    e = ELFFile(open(src, 'rb'))
+
+    symtab = e.get_section_by_name('.symtab')
+    rela = e.get_section_by_name('.rela.init.text')
+    text = e.get_section_by_name('.init.text')
+    if not rela or not text or not symtab:
+        print('没有 .rela.init.text / .init.text，无法打补丁')
+        return 3
+
+    target = None
+    for r in rela.iter_relocations():
+        if symtab.get_symbol(r['r_info_sym']).name == 'setenforce':
+            target = r['r_offset']
+            break
+    if target is None:
+        print('没找到 setenforce 调用点')
+        return 3
+
+    # 校验指令确实是 bl
+    md = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+    off_in_text = target
+    insn = next(md.disasm(bytes(text.data()[off_in_text:off_in_text + 4]), off_in_text))
+    if insn.mnemonic != 'bl':
+        print('0x%x 不是 bl（是 %s），拒绝打补丁' % (target, insn.mnemonic))
+        return 4
+
+    file_off = text['sh_offset'] + off_in_text
+    struct.pack_into('<I', raw, file_off, NOP)
+
+    # 重定位改成 NONE，否则加载器会往 NOP 里写分支偏移
+    base, entsize, count = rela['sh_offset'], rela['sh_entsize'], rela['sh_size'] // rela['sh_entsize']
+    hit = 0
+    for i in range(count):
+        p = base + i * entsize
+        r_off, r_info, r_add = struct.unpack_from('<QQq', raw, p)
+        if r_off == target:
+            struct.pack_into('<QQq', raw, p, r_off, R_AARCH64_NONE, 0)
+            hit += 1
+
+    open(dst, 'wb').write(bytes(raw))
+    print('setenforce@0x%x -> NOP（文件偏移 0x%x），重定位置 NONE %d 条' % (target, file_off, hit))
+    print('%s -> %s (%d 字节)' % (src, dst, len(raw)))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
