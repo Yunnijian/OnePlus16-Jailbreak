@@ -8,7 +8,7 @@
 - KDIR：`gki_defconfig` + `modules_prepare` + `security/selinux/built-in.a`
 - DDK：`ghcr.io/ylarod/ddk-min:android17-6.18-20260828`（clang r584948c）
 
-三个脚本都假定在 DDK 容器内、KMI 源与 KDIR 已挂载：
+四个脚本都假定在 DDK 容器内、KMI 源与 KDIR 已挂载：
 
 ```bash
 docker run --rm \

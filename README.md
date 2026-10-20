@@ -11,40 +11,20 @@
 - **KernelSU（官方 v3.3.1）**：真机跑通，模块 Live、`su` uid 0、管理器加冕、Enforcing 下可用。
 - **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器均对齐官方 CI `v4.2.0-rc3 (35235)`，真机加载成功。
 - **KernelSU Next**：LKM 已按同版本 GKI 编译并在 App 中可选，尚未做实机加载验证。
-- **SukiSU Ultra**：LKM 已按 6.18.21 自编（445,200 B），管理器 v4.2.1 (40994)，尚未做实机加载验证。
-- App 支持三种 root 管理器下拉选择；release 签名 APK 已构建。
+- **SukiSU Ultra**：LKM 按 6.18.21 自编（376,136 B）、管理器 v4.2.1 (40994)，真机加载成功：工作中 [LKM] [自定义] [越狱模式]，模块版本 41027-5，钩子类型 Tracepoint Syscall Redirect。
+- App 支持四种 root 管理器下拉选择；release 签名 APK 已构建。
 
 ## 截图
 
-### 1. BakaSU 管理器（LKM 工作中）
-
-![BakaSU 管理器](docs/screenshots/bakasu-manager.jpg)
-
-BakaSU 模块已加载：工作中 [LKM] [越狱模式]，5 个超级用户、3 个模块；内核驱动与管理器均为 v4.2.0-rc3 (35235)。
-
-### 2. 官方 KernelSU 管理器管理 BakaSU 模块
-
-![KernelSU 管理器](docs/screenshots/kernelsu-manager.jpg)
-
-BakaSU 模块编译时开启了多管理器支持（签名白名单包含官方 KernelSU），因此官方 KernelSU v3.3.1 管理器可以识别并管理该模块（模块版本 35235-5 自定义）。
-
-### 3. App 首页
-
-![App 首页](docs/screenshots/app-home.jpg)
-
-OnePlus 16 Jailbreak 首页：Shizuku 已授权；管理器选择 BakaSU（v4.2.0-rc3 / 35235）；反 root 安全弹窗开关开启；下方是内核版本、设备型号、系统指纹与 SELinux 状态。
-
-### 4. SukiSU Ultra 管理器
-
-![SukiSU Ultra 管理器](docs/screenshots/sukisu-manager.jpg)
-
-SukiSU Ultra 管理器与 LKM：工作中 [LKM] [自定义] [越狱模式]，模块版本 41027-5、管理器 v4.2.1 (40994-5)，钩子类型 Tracepoint Syscall Redirect。
-
-### 5. 管理器下拉选择
-
-![管理器下拉](docs/screenshots/app-manager-dropdown.jpg)
-
-KernelSU / KernelSU Next / BakaSU / SukiSU Ultra 四个管理器，当前选中 SukiSU Ultra（勾选）。
+<table align="center">
+  <tr>
+    <td align="center"><img src="docs/screenshots/bakasu-manager.jpg" width="170" alt="BakaSU 管理器"><br><sub><b>1 · BakaSU 管理器</b></sub></td>
+    <td align="center"><img src="docs/screenshots/kernelsu-manager.jpg" width="170" alt="KernelSU 管理器"><br><sub><b>2 · KernelSU 管理器</b></sub></td>
+    <td align="center"><img src="docs/screenshots/app-home.jpg" width="170" alt="App 首页"><br><sub><b>3 · App 首页</b></sub></td>
+    <td align="center"><img src="docs/screenshots/sukisu-manager.jpg" width="170" alt="SukiSU Ultra 管理器"><br><sub><b>4 · SukiSU Ultra</b></sub></td>
+    <td align="center"><img src="docs/screenshots/app-manager-dropdown.jpg" width="170" alt="管理器下拉"><br><sub><b>5 · 管理器下拉</b></sub></td>
+  </tr>
+</table>
 
 ## 工作原理
 
@@ -153,9 +133,12 @@ bash lkm/build-next.sh
 
 # BakaSU（原 ReSukiSU，需 tracepoint hook + 多管理器）
 bash lkm/build-bakasu.sh
+
+# SukiSU Ultra
+bash lkm/build-sukisu.sh
 ```
 
-三个产物都需在设备端按当次 boot 的 KASLR slide 由 `prep_patch` 重新写符号。管理器与 ksud 建议直接用官方 release / CI 产物（BakaSU 的 `Manager-release` 与 `ksud`），不要在本地重复编译。
+四个产物都需在设备端按当次 boot 的 KASLR slide 由 `prep_patch` 重新写符号。管理器与 ksud 建议直接用官方 release / CI 产物（BakaSU 的 `Manager-release` 与 `ksud`），不要在本地重复编译。
 
 ### 设备端工具
 
