@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Tag
@@ -81,6 +82,7 @@ class MainActivity : ComponentActivity() {
     private var deviceModel by mutableStateOf("未知")
     private var selinuxText by mutableStateOf("未知")
     private var antiRootGuard by mutableStateOf(true)
+    private var softRebootAfter by mutableStateOf(false)
     private var showLogs by mutableStateOf(false)
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { code, result ->
@@ -104,6 +106,7 @@ class MainActivity : ComponentActivity() {
         binderReady = Shizuku.pingBinder()
         refreshAuth()
         antiRootGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("antiroot_guard", true)
+        softRebootAfter = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("soft_reboot_after", false)
         val savedManager = getSharedPreferences("pyb110", MODE_PRIVATE).getString("manager", null)
         manager = runCatching { ManagerKind.valueOf(savedManager ?: "") }.getOrDefault(ManagerKind.KERNELSU)
         managerVersion = readManagerVersion(manager)
@@ -179,9 +182,19 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             item {
-                                AntiRootSwitchRow(
+                                ToggleSwitchRow(
+                                    title = "越狱后禁用安全弹窗",
+                                    icon = Icons.Filled.Security,
                                     checked = antiRootGuard,
                                     onCheckedChange = { updateAntiRootGuard(it) }
+                                )
+                            }
+                            item {
+                                ToggleSwitchRow(
+                                    title = "越狱后软重启",
+                                    icon = Icons.Filled.RestartAlt,
+                                    checked = softRebootAfter,
+                                    onCheckedChange = { updateSoftRebootAfter(it) }
                                 )
                             }
                             item {
@@ -287,15 +300,20 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun AntiRootSwitchRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    private fun ToggleSwitchRow(
+        title: String,
+        icon: ImageVector,
+        checked: Boolean,
+        onCheckedChange: (Boolean) -> Unit
+    ) {
         Card(modifier = Modifier.fillMaxWidth()) {
             SwitchPreference(
-                title = "越狱后禁用安全弹窗",
+                title = title,
                 checked = checked,
                 onCheckedChange = onCheckedChange,
                 startAction = {
                     Icon(
-                        imageVector = Icons.Filled.Security,
+                        imageVector = icon,
                         contentDescription = null,
                         modifier = Modifier.padding(end = 6.dp),
                         tint = MiuixTheme.colorScheme.onBackground
@@ -449,6 +467,12 @@ class MainActivity : ComponentActivity() {
         addLog("安全弹窗守卫: ${if (value) "开启（禁用 5 秒后自动恢复）" else "关闭"}")
     }
 
+    private fun updateSoftRebootAfter(value: Boolean) {
+        softRebootAfter = value
+        getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("soft_reboot_after", value).apply()
+        addLog("越狱后软重启: ${if (value) "开启" else "关闭"}")
+    }
+
     private fun selectManager(kind: ManagerKind) {
         manager = kind
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putString("manager", kind.name).apply()
@@ -536,6 +560,7 @@ class MainActivity : ComponentActivity() {
 
     private fun runFlow() {
         busy = true
+        val softReboot = softRebootAfter
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val binder = Shizuku.getBinder()
@@ -560,6 +585,16 @@ class MainActivity : ComponentActivity() {
                     selinuxText = se
                 }
                 addLog(if (active) "KernelSU 模块已加载" else "KernelSU 模块未加载")
+                if (softReboot && rc == 0 && active) {
+                    addLog("越狱完成，执行软重启（重启 zygote）")
+                    val rebootRc = runCatching {
+                        service.newProcess(
+                            arrayOf("su", "-c", "setprop ctl.restart zygote"),
+                            shizukuEnv(), "/data/local/tmp"
+                        ).waitFor()
+                    }.getOrDefault(-1)
+                    if (rebootRc != 0) addLog("软重启命令失败 rc=$rebootRc")
+                }
             } catch (t: Throwable) {
                 addLog("ERROR: $t")
             } finally {

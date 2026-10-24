@@ -151,15 +151,16 @@ $CC -O2 -static -o prep_patch exploit/src/prep_patch.c
 $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 ```
 
-`run.sh` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，按 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu`）与 `PYB110_DISABLE_ANTIROOT`（`1` / `0`）选择行为。
+`run.sh` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，按 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu`）与 `PYB110_DISABLE_ANTIROOT`（`1` / `0`）选择行为。
 
 ## 使用
 
 1. 用无线调试启动 Shizuku，并授权本 App。
-2. 首页选择 root 管理器（KernelSU / KernelSU Next / BakaSU）。切换管理器后需重启再越狱（已加载模块不能热替换）。
+2. 首页选择 root 管理器（KernelSU / KernelSU Next / BakaSU / SukiSU Ultra）。切换管理器后需重启再越狱（已加载模块不能热替换）。
 3. 可选开启「越狱后禁用安全弹窗」：禁用 5 秒后自动恢复；如截图等系统功能异常，软重启（重启 zygote/SystemUI）。
-4. 点击「一键越狱」，等待日志出现 `DONE`。首次运行会走竞态，可能概率性重启。
-5. 越狱成功后用对应管理器授权 root。
+4. 可选开启「越狱后软重启」：越狱流程跑完且模块确认加载后，以 `su` 执行 `setprop ctl.restart zygote`，等同软重启；失败不会影响已完成的越狱。
+5. 点击「一键越狱」，等待日志出现 `DONE`。首次运行会走竞态，可能概率性重启。
+6. 越狱成功后用对应管理器授权 root。
 
 ## 已知限制
 
