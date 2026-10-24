@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
 import kotlinx.coroutines.withContext
 import moe.shizuku.server.IShizukuService
 import rikka.shizuku.Shizuku
@@ -575,7 +576,11 @@ class MainActivity : ComponentActivity() {
                 }
                 val dir = deployDir(service)
                 addLog("部署工具到 $dir …")
-                stageAssets(service, dir)
+                val release = runCatching { android.system.Os.uname().release }.getOrDefault("")
+                val base = getSharedPreferences("pyb110", MODE_PRIVATE).getString("update_base", null)
+                    ?: RemoteAssets.DEFAULT_BASE
+                val remote = RemoteAssets(this@MainActivity, ::addLog).resolve(base, manager.manager, release)
+                stageAssets(service, dir, remote)
                 addLog("开始执行 run.sh")
                 val rc = runStreaming(service, arrayOf("sh", "$dir/run.sh"), dir)
                 addLog("run.sh 退出码=$rc")
@@ -620,7 +625,7 @@ class MainActivity : ComponentActivity() {
         return "/data/local/tmp/pyb110-$tag-${System.currentTimeMillis() / 1000}"
     }
 
-    private fun stageAssets(service: IShizukuService, dir: String) {
+    private fun stageAssets(service: IShizukuService, dir: String, remote: List<Pair<String, File>>) {
         runCatching {
             service.newProcess(
                 arrayOf("su", "-c", "killall -9 t64560_loader2 t64560_w2 t64560_v36 2>/dev/null"),
@@ -636,7 +641,7 @@ class MainActivity : ComponentActivity() {
             throw java.io.IOException("deploy dir not writable: $dir")
         }
 
-        for (name in ASSETS) {
+        for (name in BUILTIN_ASSETS) {
             val p = service.newProcess(
                 arrayOf("sh", "-c", "cat > '$dir/$name'"),
                 shizukuEnv(), "/data/local/tmp"
@@ -654,8 +659,27 @@ class MainActivity : ComponentActivity() {
             if (rc != 0) addLog("部署失败 $name rc=$rc") else addLog("已部署 $name (${copied} B)")
         }
 
+        for ((name, file) in remote) {
+            val p = service.newProcess(
+                arrayOf("sh", "-c", "cat > '$dir/$name'"),
+                shizukuEnv(), "/data/local/tmp"
+            )
+            var copied = 0L
+            try {
+                ParcelFileDescriptor.AutoCloseOutputStream(p.getOutputStream()).use { out ->
+                    file.inputStream().use { copied = it.copyTo(out) }
+                }
+            } catch (t: java.io.IOException) {
+                addLog("写入 $name 失败（目录/文件权限？）: ${t.message}")
+                throw t
+            }
+            val rc = p.waitFor()
+            if (rc != 0) addLog("部署失败 $name rc=$rc") else addLog("已部署 $name (${copied} B)")
+        }
+
+        val names = BUILTIN_ASSETS + remote.map { it.first }
         service.newProcess(
-            arrayOf("sh", "-c", "chmod 755 " + ASSETS.joinToString(" ") { "'$dir/$it'" }),
+            arrayOf("sh", "-c", "chmod 755 " + names.joinToString(" ") { "'$dir/$it'" }),
             shizukuEnv(), "/data/local/tmp"
         ).waitFor()
     }
@@ -703,11 +727,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val REQ_SHIZUKU = 1001
-        private val ASSETS = listOf(
-            "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2",
-            "forker", "ksud_official", "ksu-base.ko", "syms.txt", "take_slide.sh", "run.sh",
-            "ksud_next", "ksu-base-next.ko", "ksud_bakasu", "ksu-base-bakasu.ko",
-            "ksud_sukisu", "ksu-base-sukisu.ko"
+        private val BUILTIN_ASSETS = listOf(
+            "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2", "forker"
         )
     }
 }

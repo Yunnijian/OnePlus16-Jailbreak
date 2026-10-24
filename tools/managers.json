@@ -1,0 +1,42 @@
+{
+  "kernel": "6.18.21",
+  "shared": [
+    { "name": "run.sh", "asset": "run.sh" },
+    { "name": "take_slide.sh", "asset": "take_slide.sh" },
+    { "name": "syms.txt", "asset": "syms-6.18.21.txt" }
+  ],
+  "managers": {
+    "kernelsu": {
+      "label": "KernelSU",
+      "version": "v3.3.1 (32680)",
+      "files": [
+        { "name": "ksu-base.ko", "asset": "ksu-base.ko" },
+        { "name": "ksud_official", "asset": "ksud_official" }
+      ]
+    },
+    "next": {
+      "label": "KernelSU Next",
+      "version": "v3.4.2 (33355)",
+      "files": [
+        { "name": "ksu-base-next.ko", "asset": "ksu-base-next.ko" },
+        { "name": "ksud_next", "asset": "ksud_next" }
+      ]
+    },
+    "bakasu": {
+      "label": "BakaSU",
+      "version": "v4.2.0-rc3 (35252)",
+      "files": [
+        { "name": "ksu-base-bakasu.ko", "asset": "ksu-base-bakasu.ko" },
+        { "name": "ksud_bakasu", "asset": "ksud_bakasu" }
+      ]
+    },
+    "sukisu": {
+      "label": "SukiSU Ultra",
+      "version": "v4.2.1-r2 (41068)",
+      "files": [
+        { "name": "ksu-base-sukisu.ko", "asset": "ksu-base-sukisu.ko" },
+        { "name": "ksud_sukisu", "asset": "ksud_sukisu" }
+      ]
+    }
+  }
+}

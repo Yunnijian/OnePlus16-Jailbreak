@@ -72,7 +72,7 @@ OnePlus16-Jailbreak/
 ├── app/                         Android App（Gradle 工程根）
 │   ├── app/                     :app 模块（Kotlin/Compose/Miuix/Shizuku）
 │   │   ├── src/main/java/...    MainActivity
-│   │   ├── src/main/assets/pyb110/  设备端工具与 ko/ksud（构建时打包）
+│   │   ├── src/main/assets/pyb110/  内置 exploit 二进制（约 11 MB）
 │   │   ├── src/main/res/        自绘图标与资源
 │   │   ├── build.gradle.kts     签名配置 + R8
 │   │   └── proguard-rules.pro
@@ -82,9 +82,13 @@ OnePlus16-Jailbreak/
 ├── exploit/                     提权工具源码
 │   ├── src/t64560_w2.c          两阶段 cred 写
 │   ├── src/prep_solve.c         设备端 slide 求解
-│   ├── src/prep_patch.c         ko 符号补丁（UNDEF → link+slide）
-│   ├── scripts/run.sh           六步主流程
-│   └── scripts/take_slide.sh    抓 slide
+│   └── src/prep_patch.c         ko 符号补丁（UNDEF → link+slide）
+├── remote/                      远端素材源
+│   ├── scripts/run.sh           六步主流程（运行时下载）
+│   ├── scripts/take_slide.sh    抓 slide
+│   └── syms-6.18.21.txt         该内核的符号表
+├── assets/                      签名清单 manifest.json / manifest.sig
+├── tools/                       发布工具（managers.json + publish_assets.py）
 ├── lkm/                         LKM 构建脚本
 │   ├── build-kernelsu.sh        官方 KernelSU
 │   ├── build-next.sh            KernelSU Next
@@ -108,7 +112,7 @@ cd app
 cp keystore.properties.example keystore.properties   # 填入自己的签名信息
 # local.properties 里写 sdk.dir=/path/to/android-sdk
 ./gradlew :app:assembleDebug
-./gradlew :app:assembleRelease   # R8 + 资源压缩，约 26 MB
+./gradlew :app:assembleRelease   # R8 + 资源压缩，约 7 MB（只内置 exploit 工具）
 ```
 
 `keystore.properties`、`keystore/`、`*.jks`、`local.properties` 已被 `.gitignore` 排除。生成 release 密钥示例：
@@ -117,6 +121,28 @@ cp keystore.properties.example keystore.properties   # 填入自己的签名信�
 keytool -genkeypair -v -keystore keystore/release.jks -alias oneplus16 \
   -keyalg RSA -keysize 4096 -validity 10000 -storetype PKCS12
 ```
+
+### 远端素材与签名清单
+
+APK 只内置 exploit 二进制（`prep_*`、`t64560_*`、`forker`，约 11 MB）。四个管理器的 ko/ksud、`syms.txt`、`run.sh`、`take_slide.sh` 都在运行时下载：
+
+1. 取 `https://raw.githubusercontent.com/Yunnijian/OnePlus16-Jailbreak/refs/heads/main/assets/manifest.json` 与同名 `.sig`；
+2. 用 App 内置的 ECDSA P-256 公钥验签（私钥 `keystore/update-signing-key.pem` 永不入库）；
+3. 按清单里的 `kernel` 与首页所选管理器挑条目，逐个校验 `size` + `sha256`，`.ko` 还要含 `vermagic=<kernel>` 才接受；
+4. 文件按 sha256 缓存在 App 私有目录，拉清单失败时用 last-good 缓存；部署仍走原来的 Shizuku `cat >` 流。
+
+更新一轮素材：
+
+```bash
+# 1) 准备 staging（文件名即部署名，syms 用 syms-6.18.21.txt）
+# 2) 改 tools/managers.json 里的 label/version
+python3 tools/publish_assets.py --src <staging> --out assets \
+  --key app/keystore/update-signing-key.pem --upload
+# 3) 提交清单，App 下次运行即生效（无需重装）
+git add assets/manifest.json assets/manifest.sig
+```
+
+`--upload` 会把产物传到一个滚动 Release（默认 tag `assets-latest`，同名资产 `--clobber` 覆盖），清单里的 URL 指向那里。测试时可加 `--base-url http://127.0.0.1:8765` 配合 `adb reverse` 做本地联调（网络安全配置只对回环放行明文）。
 
 ### LKM
 
