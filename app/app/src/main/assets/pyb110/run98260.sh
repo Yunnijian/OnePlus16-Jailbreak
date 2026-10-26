@@ -58,6 +58,12 @@ finish_manager() {
   fi
   su -c "id; getenforce; grep -i kernelsu /proc/modules" 2>&1
   echo "SU_ID_RC=$?"
+  if [ "$(su -c 'id -u' 2>/dev/null | tr -d '\r')" = "0" ]; then
+    su -c "pkill -9 t98260_plant 2>/dev/null; rm -f /data/local/tmp/t98260-root.sock" 2>&1
+    echo "ROOTD_CLEANED"
+  else
+    echo "ROOTD_KEPT: su 不可用，保留 rootd 兜底"
+  fi
   am force-stop "$MPKG" 2>/dev/null
   monkey -p "$MPKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 }
