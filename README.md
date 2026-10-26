@@ -87,7 +87,7 @@ OnePlus16-Jailbreak/
 │   └── src/prep_patch.c         ko 符号补丁（UNDEF → link+slide）
 ├── remote/                      远端素材源
 │   ├── scripts/run.sh           64560 六步主流程（运行时下载）
-│   └── assets/pyb110/run98260.sh 98260 主流程（brm_plant -> rootd -> late-load）
+│   └── assets/pyb110/run98260.sh 98260 主流程（t98260_plant -> rootd -> late-load）
 │   ├── scripts/take_slide.sh    抓 slide
 │   └── syms-6.18.21.txt         该内核的符号表
 ├── assets/                      签名清单 manifest.json / manifest.sig
@@ -102,7 +102,7 @@ OnePlus16-Jailbreak/
 └── LICENSE                      MIT（本项目自研代码）
 ```
 
-> 设备端还使用公开仓库提供的 `t64560_v36`、`t64560_loader2`、`forker` 二进制（Apache-2.0），以及 CVE-2026-98260 PYB110 移植的 `brm_plant`、`pc98260_su`（MIT，官方 release `v1.0.0-pyb110-6.18.21`），全部打包在 `app/app/src/main/assets/pyb110/` 内，来源见 `NOTICE`。
+> 设备端还使用公开仓库提供的 `t64560_v36`、`t64560_loader2`、`forker` 二进制（Apache-2.0）；98260 分支使用本仓库 [exploit/src](exploit/src) 自建的 `t98260_plant`、`t98260_su`。全部打包在 `app/app/src/main/assets/pyb110/` 内，来源与许可见 `NOTICE` 与下文。
 
 ## 构建
 
@@ -127,7 +127,7 @@ keytool -genkeypair -v -keystore keystore/release.jks -alias oneplus16 \
 
 ### 远端素材与签名清单
 
-APK 只内置 exploit 二进制（`prep_*`、`t64560_*`、`forker`、`brm_plant`、`pc98260_su`、`run98260.sh`，约 13.4 MB），**按所选漏洞只部署其中一组**（64560 不推 98260 的，反之亦然；98260 也不下载 `run.sh`）。四个管理器的 ko/ksud、`syms.txt`、`run.sh`、`take_slide.sh` 都在运行时下载：
+APK 只内置 exploit 二进制（`prep_*`、`t64560_*`、`forker`、`t98260_plant`、`t98260_su`、`run98260.sh`，约 15 MB），**按所选漏洞只部署其中一组**（64560 不推 98260 的，反之亦然；98260 也不部署 `run.sh`）。四个管理器的 ko/ksud、`syms.txt`、`run.sh`、`take_slide.sh` 全部内置，运行时不联网：
 
 1. 取 `https://raw.githubusercontent.com/Yunnijian/OnePlus16-Jailbreak/refs/heads/main/assets/manifest.json` 与同名 `.sig`；
 2. 用 App 内置的 ECDSA P-256 公钥验签（私钥 `keystore/update-signing-key.pem` 永不入库）；
@@ -208,7 +208,7 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 
 - 提权原语与 `t64560_v36` / `t64560_loader2` / `forker`、部分上游脚本：  
   [Feng1586/CVE-2026-64560-public](https://github.com/Feng1586/CVE-2026-64560-public)（Apache-2.0）。
-- CVE-2026-98260 PYB110 公开移植（`brm_plant` / `pc98260_su` 资产与流程背景）：  
+- CVE-2026-98260 PYB110 公开移植（98260 流程与设计背景；内置 `t98260_*` 由本仓库 `exploit/src` 构建）：  
   [AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak](https://github.com/AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak)（MIT，许可全文见 `third_party/cve-2026-98260-LICENSES/AzirX1337-MIT.txt`）。
 - 官方 KernelSU：[tiann/KernelSU](https://github.com/tiann/KernelSU)（GPL-2.0）。
 - KernelSU Next：[rifsxd/KernelSU-Next](https://github.com/rifsxd/KernelSU-Next)（GPL-2.0）。

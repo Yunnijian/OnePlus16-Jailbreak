@@ -635,7 +635,7 @@ class MainActivity : ComponentActivity() {
                 "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2", "forker", "run.sh"
             )
             ExploitKind.CVE98260 -> listOf(
-                "brm_plant", "pc98260_su", "prep_solve", "prep_patch", "forker", "run98260.sh"
+                "t98260_plant", "t98260_su", "prep_solve", "prep_patch", "forker", "run98260.sh"
             )
         }
         val (ko, ksud) = when (manager) {
@@ -647,8 +647,8 @@ class MainActivity : ComponentActivity() {
         return common.map { it to it } + listOf(
             "syms.txt" to "syms.txt",
             "take_slide.sh" to "take_slide.sh",
-            ko to "ksu-base.ko",
-            ksud to "ksud_official"
+            ko to ko,
+            ksud to ksud
         )
     }
 
@@ -670,7 +670,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stageAssets(service: IShizukuService, dir: String, files: List<Pair<String, String>>) {
-        val stale = "killall -9 t64560_loader2 t64560_w2 t64560_v36 brm_plant 2>/dev/null"
+        val stale = "killall -9 t64560_loader2 t64560_w2 t64560_v36 brm_plant t98260_plant 2>/dev/null"
         runCatching {
             service.newProcess(
                 arrayOf("sh", "-c", stale),

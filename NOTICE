@@ -35,10 +35,10 @@ Third-party components
 7. CVE-2026-98260 OnePlus 16 (PYB110) temporary root kit
    Source: https://github.com/AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak
    License: MIT
-   Used: brm_plant / pc98260_su binaries from the official release
-         v1.0.0-pyb110-6.18.21 (packed in App assets); run98260.sh follows
-         the upstream flow (slide -> plant -> rootd -> ksud late-load).
-         License text: third_party/cve-2026-98260-LICENSES/AzirX1337-MIT.txt
+   Used: background and flow reference for the 98260 branch. The bundled
+         t98260_plant / t98260_su binaries are built from exploit/src in
+         this repository. License text:
+         third_party/cve-2026-98260-LICENSES/AzirX1337-MIT.txt
 
 8. Shizuku API
    Source: https://github.com/RikkaApps/Shizuku-API
