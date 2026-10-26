@@ -208,6 +208,8 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 
 - 提权原语与 `t64560_v36` / `t64560_loader2` / `forker`、部分上游脚本：  
   [Feng1586/CVE-2026-64560-public](https://github.com/Feng1586/CVE-2026-64560-public)（Apache-2.0）。
+- CVE-2026-98260 PYB110 公开移植（`brm_plant` / `pc98260_su` 资产与流程背景）：  
+  [AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak](https://github.com/AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak)（MIT，许可全文见 `third_party/cve-2026-98260-LICENSES/AzirX1337-MIT.txt`）。
 - 官方 KernelSU：[tiann/KernelSU](https://github.com/tiann/KernelSU)（GPL-2.0）。
 - KernelSU Next：[rifsxd/KernelSU-Next](https://github.com/rifsxd/KernelSU-Next)（GPL-2.0）。
 - BakaSU（原 ReSukiSU）：[Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU)（GPL-2.0）。

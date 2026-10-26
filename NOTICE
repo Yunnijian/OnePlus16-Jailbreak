@@ -38,6 +38,7 @@ Third-party components
    Used: brm_plant / pc98260_su binaries from the official release
          v1.0.0-pyb110-6.18.21 (packed in App assets); run98260.sh follows
          the upstream flow (slide -> plant -> rootd -> ksud late-load).
+         License text: third_party/cve-2026-98260-LICENSES/AzirX1337-MIT.txt
 
 8. Shizuku API
    Source: https://github.com/RikkaApps/Shizuku-API
