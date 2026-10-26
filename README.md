@@ -13,7 +13,7 @@
 - **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器对齐上游 `35252`（`v4.2.0-rc3`），真机加载成功；LKM 435,616 B。
 - **KernelSU Next**：LKM 350,000 B，已按同版本 GKI 编译并在 App 中可选，尚未做实机加载验证。
 - **SukiSU Ultra**：LKM/ksud 对齐 `v4.2.1-r2`（KSU 版本 41068），LKM 535,328 B；真机加载成功。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有三个流程开关；release 签名 APK 已构建。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有三个流程开关；release 签名 APK v1.12 已构建。
 - **全内置**：四个管理器的 ko/ksud、符号表、slide 与越狱脚本全部打包在 APK 内（`assets/pyb110` 约 48 MB，release APK 约 28 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
@@ -239,5 +239,5 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 
 ## 校验和
 
-- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 29,171,420 B / md5 `be3610775a8fc406dca228a9bab8b7c9`（本地构建产物，不入库）。
+- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 29,171,944 B / md5 `26a9d28daf8651be59e2dc0e25aea1d7`（本地构建产物，不入库）。
 - KernelSU LKM（6.18.21）：349,224 B；Next：350,000 B；BakaSU：435,616 B；SukiSU：535,328 B（strip 后）。
