@@ -126,7 +126,7 @@ keytool -genkeypair -v -keystore keystore/release.jks -alias oneplus16 \
 
 ### 远端素材与签名清单
 
-APK 只内置 exploit 二进制（`prep_*`、`t64560_*`、`forker`、`brm_plant`、`pc98260_su`、`run98260.sh`，约 13.4 MB）。四个管理器的 ko/ksud、`syms.txt`、`run.sh`、`take_slide.sh` 都在运行时下载：
+APK 只内置 exploit 二进制（`prep_*`、`t64560_*`、`forker`、`brm_plant`、`pc98260_su`、`run98260.sh`，约 13.4 MB），**按所选漏洞只部署其中一组**（64560 不推 98260 的，反之亦然；98260 也不下载 `run.sh`）。四个管理器的 ko/ksud、`syms.txt`、`run.sh`、`take_slide.sh` 都在运行时下载：
 
 1. 取 `https://raw.githubusercontent.com/Yunnijian/OnePlus16-Jailbreak/refs/heads/main/assets/manifest.json` 与同名 `.sig`；
 2. 用 App 内置的 ECDSA P-256 公钥验签（私钥 `keystore/update-signing-key.pem` 永不入库）；

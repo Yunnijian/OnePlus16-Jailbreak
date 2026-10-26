@@ -623,7 +623,9 @@ class MainActivity : ComponentActivity() {
                 val release = runCatching { android.system.Os.uname().release }.getOrDefault("")
                 val base = getSharedPreferences("pyb110", MODE_PRIVATE).getString("update_base", null)
                     ?: RemoteAssets.DEFAULT_BASE
-                val remote = RemoteAssets(this@MainActivity, ::addLog).resolve(base, manager.manager, release)
+                val remote = RemoteAssets(this@MainActivity, ::addLog)
+                    .resolve(base, manager.manager, release)
+                    .filter { !(exploit == ExploitKind.CVE98260 && it.first == "run.sh") }
                 stageAssets(service, dir, remote)
                 if (exploit == ExploitKind.CVE98260) {
                     addLog("98260 建议在干净开机后运行；命中后约 20-120 秒，期间请勿手动结束 brm_plant")
@@ -653,6 +655,11 @@ class MainActivity : ComponentActivity() {
                 withContext(Dispatchers.Main) { busy = false }
             }
         }
+    }
+
+    private fun builtinAssets(kind: ExploitKind): List<String> = when (kind) {
+        ExploitKind.CVE64560 -> BUILTIN_64560
+        ExploitKind.CVE98260 -> BUILTIN_98260
     }
 
     private fun deployDir(service: IShizukuService): String {
@@ -693,7 +700,7 @@ class MainActivity : ComponentActivity() {
             throw java.io.IOException("deploy dir not writable: $dir")
         }
 
-        for (name in BUILTIN_ASSETS) {
+        for (name in builtinAssets(exploit)) {
             val p = service.newProcess(
                 arrayOf("sh", "-c", "cat > '$dir/$name'"),
                 shizukuEnv(), "/data/local/tmp"
@@ -729,7 +736,7 @@ class MainActivity : ComponentActivity() {
             if (rc != 0) addLog("部署失败 $name rc=$rc") else addLog("已部署 $name (${copied} B)")
         }
 
-        val names = BUILTIN_ASSETS + remote.map { it.first }
+        val names = builtinAssets(exploit) + remote.map { it.first }
         service.newProcess(
             arrayOf("sh", "-c", "chmod 755 " + names.joinToString(" ") { "'$dir/$it'" }),
             shizukuEnv(), "/data/local/tmp"
@@ -799,9 +806,11 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val REQ_SHIZUKU = 1001
-        private val BUILTIN_ASSETS = listOf(
-            "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2", "forker",
-            "brm_plant", "pc98260_su", "run98260.sh"
+        private val BUILTIN_64560 = listOf(
+            "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2", "forker"
+        )
+        private val BUILTIN_98260 = listOf(
+            "brm_plant", "pc98260_su", "prep_solve", "prep_patch", "forker", "run98260.sh"
         )
     }
 }
