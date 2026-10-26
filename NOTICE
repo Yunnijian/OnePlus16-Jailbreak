@@ -39,7 +39,15 @@ Third-party components
          v1.0.0-pyb110-6.18.21 (packed in App assets); run98260.sh follows
          the upstream flow (slide -> plant -> rootd -> ksud late-load).
 
-8. Shizuku API
+8. Backdrop (AndroidLiquidGlass)
+   Source: https://github.com/Kyant0/AndroidLiquidGlass
+   License: Apache-2.0
+   Used: io.github.kyant0:backdrop 2.0.1 and io.github.kyant0:shapes 1.2.1;
+         bottom navigation adapted from the catalog example
+         app/src/commonMain/kotlin/com/kyant/backdrop/catalog/components/
+         LiquidBottomTabs.kt + LiquidBottomTab.kt (with its drag/highlight utils).
+
+9. Shizuku API
    Source: https://github.com/RikkaApps/Shizuku-API
    License: Apache-2.0
    Used: remote process execution.

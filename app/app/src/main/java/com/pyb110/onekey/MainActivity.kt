@@ -7,6 +7,13 @@ import android.os.ParcelFileDescriptor
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -25,7 +33,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeveloperBoard
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Smartphone
@@ -58,6 +68,10 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.pyb110.onekey.liquid.LiquidBottomTab
+import com.pyb110.onekey.liquid.LiquidBottomTabs
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
@@ -86,6 +100,7 @@ class MainActivity : ComponentActivity() {
     private var antiRootGuard by mutableStateOf(true)
     private var softRebootAfter by mutableStateOf(false)
     private var showLogs by mutableStateOf(false)
+    private var tab by mutableStateOf(0)
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { code, result ->
         if (code == REQ_SHIZUKU) {
@@ -125,10 +140,12 @@ class MainActivity : ComponentActivity() {
                     LogScreen(state = logs.toList(), onBack = { showLogs = false })
                 } else {
                     val scrollBehavior = MiuixScrollBehavior()
+                    val backdrop = rememberLayerBackdrop()
+                    val liquidContentColor = if (isSystemInDarkTheme()) Color.White else Color.Black
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = "OnePlus 16 Jailbreak",
+                                title = if (tab == 0) "首页" else "越狱",
                                 scrollBehavior = scrollBehavior,
                                 navigationIcon = {
                                     IconButton(onClick = { showLogs = true }) {
@@ -140,17 +157,70 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             )
+                        },
+                        bottomBar = {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 32.dp, vertical = 8.dp)
+                            ) {
+                                LiquidBottomTabs(
+                                    selectedTabIndex = { tab },
+                                    onTabSelected = { tab = it },
+                                    backdrop = backdrop,
+                                    tabsCount = 2
+                                ) {
+                                    LiquidBottomTab({ tab = 0 }) {
+                                        Icon(
+                                            Icons.Filled.Home,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp),
+                                            tint = liquidContentColor
+                                        )
+                                        Text("首页", fontSize = 11.sp, color = liquidContentColor)
+                                    }
+                                    LiquidBottomTab({ tab = 1 }) {
+                                        Icon(
+                                            Icons.Filled.Build,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp),
+                                            tint = liquidContentColor
+                                        )
+                                        Text("越狱", fontSize = 11.sp, color = liquidContentColor)
+                                    }
+                                }
+                            }
                         }
                     ) { inner ->
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .layerBackdrop(backdrop)
+                        ) {
+                        AnimatedContent(
+                            targetState = tab,
+                            transitionSpec = {
+                                val dir = if (targetState > initialState) 1 else -1
+                                (slideInHorizontally(tween(320)) { dir * it / 3 } +
+                                    fadeIn(tween(220))) togetherWith
+                                    (slideOutHorizontally(tween(280)) { -dir * it / 3 } +
+                                        fadeOut(tween(180)))
+                            },
+                            label = "tab"
+                        ) { page ->
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .nestedScroll(scrollBehavior.nestedScrollConnection)
-                                .padding(inner)
                                 .padding(horizontal = 12.dp),
-                            contentPadding = PaddingValues(vertical = 12.dp),
+                            contentPadding = PaddingValues(
+                                top = inner.calculateTopPadding() + 12.dp,
+                                bottom = inner.calculateBottomPadding() + 12.dp
+                            ),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            if (page == 0) {
                             item {
                                 StatusCard(granted = binderReady && authorized)
                             }
@@ -178,6 +248,16 @@ class MainActivity : ComponentActivity() {
                                     colors = ButtonDefaults.textButtonColorsPrimary()
                                 )
                             }
+                            item {
+                                InfoCard(
+                                    kernelVersion = kernelVersion,
+                                    deviceModel = deviceModel,
+                                    fingerprint = Build.FINGERPRINT,
+                                    selinux = selinuxText,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            } else {
                             item {
                                 ExploitRow(
                                     exploit = exploit,
@@ -207,15 +287,9 @@ class MainActivity : ComponentActivity() {
                                     onCheckedChange = { updateSoftRebootAfter(it) }
                                 )
                             }
-                            item {
-                                InfoCard(
-                                    kernelVersion = kernelVersion,
-                                    deviceModel = deviceModel,
-                                    fingerprint = Build.FINGERPRINT,
-                                    selinux = selinuxText,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
                             }
+                        }
+                        }
                         }
                     }
                 }
