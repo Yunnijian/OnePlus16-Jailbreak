@@ -13,7 +13,17 @@ case "$MANAGER" in
   sukisu) BASE=ksu-base-sukisu.ko; KSUD=ksud_sukisu; MPKG=com.sukisu.ultra ;;
   *) MANAGER=kernelsu; BASE=ksu-base.ko; KSUD=ksud_official; MPKG=me.weishu.kernelsu ;;
 esac
-echo "EXPLOIT=98260 MANAGER=$MANAGER"
+MPKG=${PYB110_MANAGER_PKG:-$MPKG}
+LATE_LOAD=${PYB110_LATE_LOAD:-1}
+echo "EXPLOIT=98260 MANAGER=$MANAGER VERSION=${PYB110_MANAGER_VERSION:-unknown} late_load=$LATE_LOAD"
+
+install_manager_apk() {
+  APK=${PYB110_MANAGER_APK:-}
+  if [ -n "$APK" ] && [ -f "$D/$APK" ]; then
+    su -c "pm install -r '$D/$APK'" 2>&1
+    echo "APK_INSTALL_RC=$?"
+  fi
+}
 
 finish_manager() {
   cp -f "$KSUD" /data/local/tmp/ksud_official 2>/dev/null
@@ -30,6 +40,7 @@ finish_manager() {
   fi
   su -c "/data/local/tmp/ksud_official install" 2>&1
   echo "KSUD_INSTALL_RC=$?"
+  install_manager_apk
   su -c "id; getenforce; grep -i kernelsu /proc/modules" 2>&1
   echo "SU_ID_RC=$?"
   am force-stop "$MPKG" 2>/dev/null
@@ -81,10 +92,12 @@ if [ "$ROOTED" != "1" ] || [ "$(getenforce 2>/dev/null)" != "Permissive" ]; then
 fi
 echo "PLANT_OK: enforce=Permissive, rootd ready"
 
-echo "[4/4] handoff to $MANAGER via ksud late-load"
-./pc98260_su -c "$D/$KSUD late-load --kmi android17-6.18 --allow-shell --package-name $MPKG" 2>&1
-sleep 2
-if ! grep -qi kernelsu /proc/modules 2>/dev/null; then
+echo "[4/4] handoff to $MANAGER (late_load=$LATE_LOAD)"
+if [ "$LATE_LOAD" = "1" ]; then
+  ./pc98260_su -c "$D/$KSUD late-load --kmi android17-6.18 --allow-shell --package-name $MPKG" 2>&1
+  sleep 2
+fi
+if ! grep -qi kernelsu /proc/modules 2>/dev/null && [ "$LATE_LOAD" = "1" ]; then
   echo "LATE_LOAD_RETRY: without --kmi"
   ./pc98260_su -c "$D/$KSUD late-load --allow-shell --package-name $MPKG" 2>&1
   sleep 2

@@ -12,7 +12,16 @@ case "$MANAGER" in
   sukisu) BASE=ksu-base-sukisu.ko; KSUD=ksud_sukisu; MPKG=com.sukisu.ultra ;;
   *) MANAGER=kernelsu; BASE=ksu-base.ko; KSUD=ksud_official; MPKG=me.weishu.kernelsu ;;
 esac
-echo "MANAGER=$MANAGER"
+MPKG=${PYB110_MANAGER_PKG:-$MPKG}
+echo "MANAGER=$MANAGER VERSION=${PYB110_MANAGER_VERSION:-unknown}"
+
+install_manager_apk() {
+  APK=${PYB110_MANAGER_APK:-}
+  if [ -n "$APK" ] && [ -f "$D/$APK" ]; then
+    su -c "pm install -r '$D/$APK'" 2>&1
+    echo "APK_INSTALL_RC=$?"
+  fi
+}
 
 if grep -qi kernelsu /proc/modules 2>/dev/null; then
   echo "ALREADY_LOADED: kernelsu present, skip exploit/load"
@@ -30,6 +39,7 @@ if grep -qi kernelsu /proc/modules 2>/dev/null; then
   fi
   su -c "/data/local/tmp/ksud_official install" 2>&1
   echo "KSUD_INSTALL_RC=$?"
+  install_manager_apk
   su -c "chmod 644 /data/system/packages.list 2>/dev/null; mv /data/system/packages.list /data/system/packages.list.k 2>/dev/null && mv /data/system/packages.list.k /data/system/packages.list 2>/dev/null; sleep 2" 2>&1
   am force-stop "$MPKG" 2>/dev/null
   monkey -p "$MPKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
@@ -108,6 +118,7 @@ else
 fi
 su -c "/data/local/tmp/ksud_official install" 2>&1
 echo "KSUD_INSTALL_RC=$?"
+install_manager_apk
 sleep 10
 su -c "id; getenforce; grep -i kernelsu /proc/modules; /data/adb/ksud debug version; pm list packages -d | grep exsystemservice" 2>&1
 echo "SU_ID_RC=$?"
