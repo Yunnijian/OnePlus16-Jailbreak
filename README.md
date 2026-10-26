@@ -13,6 +13,7 @@
 - **KernelSU Next**：LKM 已按同版本 GKI 编译并在 App 中可选，尚未做实机加载验证。
 - **SukiSU Ultra**：LKM 按 6.18.21 自编（376,136 B）、管理器 v4.2.1 (40994)，真机加载成功：工作中 [LKM] [自定义] [越狱模式]，模块版本 41027-5，钩子类型 Tracepoint Syscall Redirect。
 - App 支持四种 root 管理器下拉选择；release 签名 APK 已构建。
+- **双漏洞可选**：默认 `CVE-2026-64560`（逐字段零写 cred），新增 `CVE-2026-98260`（假 cred 指针写 + ksud late-load）。下拉选择后点击“一键越狱”即走对应链路；98260 建议在干净开机后使用。
 
 ## 截图
 
@@ -84,7 +85,8 @@ OnePlus16-Jailbreak/
 │   ├── src/prep_solve.c         设备端 slide 求解
 │   └── src/prep_patch.c         ko 符号补丁（UNDEF → link+slide）
 ├── remote/                      远端素材源
-│   ├── scripts/run.sh           六步主流程（运行时下载）
+│   ├── scripts/run.sh           64560 六步主流程（运行时下载）
+│   └── assets/pyb110/run98260.sh 98260 主流程（brm_plant -> rootd -> late-load）
 │   ├── scripts/take_slide.sh    抓 slide
 │   └── syms-6.18.21.txt         该内核的符号表
 ├── assets/                      签名清单 manifest.json / manifest.sig
@@ -99,7 +101,7 @@ OnePlus16-Jailbreak/
 └── LICENSE                      MIT（本项目自研代码）
 ```
 
-> 设备端还使用公开仓库提供的 `t64560_v36`、`t64560_loader2`、`forker` 二进制（Apache-2.0），打包在 `app/app/src/main/assets/pyb110/` 内，来源见 `NOTICE`。
+> 设备端还使用公开仓库提供的 `t64560_v36`、`t64560_loader2`、`forker` 二进制（Apache-2.0），以及 CVE-2026-98260 PYB110 移植的 `brm_plant`、`pc98260_su`（MIT，官方 release `v1.0.0-pyb110-6.18.21`），全部打包在 `app/app/src/main/assets/pyb110/` 内，来源见 `NOTICE`。
 
 ## 构建
 
@@ -124,7 +126,7 @@ keytool -genkeypair -v -keystore keystore/release.jks -alias oneplus16 \
 
 ### 远端素材与签名清单
 
-APK 只内置 exploit 二进制（`prep_*`、`t64560_*`、`forker`，约 11 MB）。四个管理器的 ko/ksud、`syms.txt`、`run.sh`、`take_slide.sh` 都在运行时下载：
+APK 只内置 exploit 二进制（`prep_*`、`t64560_*`、`forker`、`brm_plant`、`pc98260_su`、`run98260.sh`，约 13.4 MB）。四个管理器的 ko/ksud、`syms.txt`、`run.sh`、`take_slide.sh` 都在运行时下载：
 
 1. 取 `https://raw.githubusercontent.com/Yunnijian/OnePlus16-Jailbreak/refs/heads/main/assets/manifest.json` 与同名 `.sig`；
 2. 用 App 内置的 ECDSA P-256 公钥验签（私钥 `keystore/update-signing-key.pem` 永不入库）；

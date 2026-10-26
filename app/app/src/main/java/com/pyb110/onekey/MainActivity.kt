@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
     private var authorized by mutableStateOf(false)
     private var binderReady by mutableStateOf(false)
     private var ksuActive by mutableStateOf(false)
+    private var exploit by mutableStateOf(ExploitKind.CVE64560)
     private var manager by mutableStateOf(ManagerKind.KERNELSU)
     private var managerVersion by mutableStateOf("未安装")
     private var kernelVersion by mutableStateOf("未知")
@@ -108,6 +109,8 @@ class MainActivity : ComponentActivity() {
         refreshAuth()
         antiRootGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("antiroot_guard", true)
         softRebootAfter = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("soft_reboot_after", false)
+        val savedExploit = getSharedPreferences("pyb110", MODE_PRIVATE).getString("exploit", null)
+        exploit = runCatching { ExploitKind.valueOf(savedExploit ?: "") }.getOrDefault(ExploitKind.CVE64560)
         val savedManager = getSharedPreferences("pyb110", MODE_PRIVATE).getString("manager", null)
         manager = runCatching { ManagerKind.valueOf(savedManager ?: "") }.getOrDefault(ManagerKind.KERNELSU)
         managerVersion = readManagerVersion(manager)
@@ -173,6 +176,12 @@ class MainActivity : ComponentActivity() {
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.textButtonColorsPrimary()
+                                )
+                            }
+                            item {
+                                ExploitRow(
+                                    exploit = exploit,
+                                    onSelect = { selectExploit(it) }
                                 )
                             }
                             item {
@@ -262,6 +271,35 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    @Composable
+    private fun ExploitRow(exploit: ExploitKind, onSelect: (ExploitKind) -> Unit) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                WindowDropdownPreference(
+                    title = "漏洞利用方式",
+                    summary = exploit.summary,
+                    items = ExploitKind.entries.map { it.fullLabel },
+                    selectedIndex = exploit.ordinal,
+                    startAction = {
+                        Icon(
+                            imageVector = Icons.Filled.Security,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 6.dp),
+                            tint = MiuixTheme.colorScheme.onBackground
+                        )
+                    },
+                    onSelectedIndexChange = { index -> onSelect(ExploitKind.entries[index]) }
+                )
+            }
+            Text(
+                text = exploit.hint,
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.padding(start = 4.dp)
+            )
         }
     }
 
@@ -474,6 +512,12 @@ class MainActivity : ComponentActivity() {
         addLog("越狱后软重启: ${if (value) "开启" else "关闭"}")
     }
 
+    private fun selectExploit(kind: ExploitKind) {
+        exploit = kind
+        getSharedPreferences("pyb110", MODE_PRIVATE).edit().putString("exploit", kind.name).apply()
+        addLog("已选择漏洞利用: ${kind.fullLabel}")
+    }
+
     private fun selectManager(kind: ManagerKind) {
         manager = kind
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putString("manager", kind.name).apply()
@@ -581,8 +625,11 @@ class MainActivity : ComponentActivity() {
                     ?: RemoteAssets.DEFAULT_BASE
                 val remote = RemoteAssets(this@MainActivity, ::addLog).resolve(base, manager.manager, release)
                 stageAssets(service, dir, remote)
-                addLog("开始执行 run.sh")
-                val rc = runStreaming(service, arrayOf("sh", "$dir/run.sh"), dir)
+                if (exploit == ExploitKind.CVE98260) {
+                    addLog("98260 建议在干净开机后运行；命中后约 20-120 秒，期间请勿手动结束 brm_plant")
+                }
+                addLog("开始执行 ${exploit.script}")
+                val rc = runStreaming(service, arrayOf("sh", "$dir/${exploit.script}"), dir)
                 addLog("run.sh 退出码=$rc")
                 val (active, se) = readDeviceState(service)
                 withContext(Dispatchers.Main) {
@@ -626,9 +673,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stageAssets(service: IShizukuService, dir: String, remote: List<Pair<String, File>>) {
+        val stale = if (exploit == ExploitKind.CVE98260) {
+            "killall -9 brm_plant 2>/dev/null"
+        } else {
+            "killall -9 t64560_loader2 t64560_w2 t64560_v36 2>/dev/null"
+        }
         runCatching {
             service.newProcess(
-                arrayOf("su", "-c", "killall -9 t64560_loader2 t64560_w2 t64560_v36 2>/dev/null"),
+                arrayOf("sh", "-c", stale),
                 shizukuEnv(), "/data/local/tmp"
             ).waitFor()
         }
@@ -718,6 +770,26 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    private enum class ExploitKind(
+        val fullLabel: String,
+        val summary: String,
+        val hint: String,
+        val script: String
+    ) {
+        CVE64560(
+            "CVE-2026-64560（旧）",
+            "64560 · 逐字段零写 cred",
+            "任何状态可尝试；失败可重复执行",
+            "run.sh"
+        ),
+        CVE98260(
+            "CVE-2026-98260（新）",
+            "98260 · 假 cred 指针写 + KSU late-load",
+            "建议干净开机后使用；命中后勿手动结束 brm_plant",
+            "run98260.sh"
+        )
+    }
+
     private enum class ManagerKind(val fullLabel: String, val pkg: String, val manager: String) {
         KERNELSU("KernelSU", "me.weishu.kernelsu", "kernelsu"),
         NEXT("KernelSU Next", "com.rifsxd.ksunext", "next"),
@@ -728,7 +800,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQ_SHIZUKU = 1001
         private val BUILTIN_ASSETS = listOf(
-            "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2", "forker"
+            "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2", "forker",
+            "brm_plant", "pc98260_su", "run98260.sh"
         )
     }
 }
