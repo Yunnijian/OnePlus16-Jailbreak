@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
     private var selinuxText by mutableStateOf("未知")
     private var antiRootGuard by mutableStateOf(true)
     private var softRebootAfter by mutableStateOf(false)
+    private var unloadGuard by mutableStateOf(false)
     private var showLogs by mutableStateOf(false)
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { code, result ->
@@ -130,6 +131,7 @@ class MainActivity : ComponentActivity() {
         refreshAuth()
         antiRootGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("antiroot_guard", true)
         softRebootAfter = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("soft_reboot_after", false)
+        unloadGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("unload_guard", false)
         val savedExploit = getSharedPreferences("pyb110", MODE_PRIVATE).getString("exploit", null)
         exploit = runCatching { ExploitKind.valueOf(savedExploit ?: "") }.getOrDefault(ExploitKind.CVE64560)
         val savedManager = getSharedPreferences("pyb110", MODE_PRIVATE).getString("manager", null)
@@ -254,6 +256,20 @@ class MainActivity : ComponentActivity() {
                                             startAction = {
                                                 Icon(
                                                     imageVector = Icons.Filled.RestartAlt,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.padding(end = 6.dp),
+                                                    tint = MiuixTheme.colorScheme.onBackground
+                                                )
+                                            }
+                                        )
+                                        HorizontalDivider()
+                                        SwitchPreference(
+                                            title = "越狱后卸载内核安全防护",
+                                            checked = unloadGuard,
+                                            onCheckedChange = { updateUnloadGuard(it) },
+                                            startAction = {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Security,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
                                                     tint = MiuixTheme.colorScheme.onBackground
@@ -480,6 +496,12 @@ class MainActivity : ComponentActivity() {
         addLog("越狱后软重启: ${if (value) "开启" else "关闭"}")
     }
 
+    private fun updateUnloadGuard(value: Boolean) {
+        unloadGuard = value
+        getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("unload_guard", value).apply()
+        addLog("越狱后卸载内核安全防护: ${if (value) "开启" else "关闭"}")
+    }
+
     private fun selectExploit(kind: ExploitKind) {
         exploit = kind
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putString("exploit", kind.name).apply()
@@ -691,6 +713,7 @@ class MainActivity : ComponentActivity() {
     private fun runStreaming(service: IShizukuService, cmd: Array<String>, dir: String): Int {
         val env = shizukuEnv() + "PYB110_DIR=$dir" + "PYB110_MANAGER=${manager.manager}" +
             "PYB110_LATE_LOAD=1" +
+            "PYB110_UNLOAD_GUARD=${if (unloadGuard) "1" else "0"}" +
             "PYB110_DISABLE_ANTIROOT=${if (antiRootGuard) "1" else "0"}"
         val p = service.newProcess(cmd, env, dir)
         val out = ParcelFileDescriptor.AutoCloseInputStream(p.getInputStream())

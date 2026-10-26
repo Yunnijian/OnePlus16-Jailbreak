@@ -25,6 +25,22 @@ install_manager_apk() {
   fi
 }
 
+
+unload_guard() {
+  if [ "${PYB110_UNLOAD_GUARD:-0}" = "1" ]; then
+    echo "UNLOAD_GUARD: rmmod oplus_secure_guard_new"
+    su -c "rmmod oplus_secure_guard_new" 2>&1
+    echo "UNLOAD_GUARD_RC=$?"
+    if grep -qi oplus_secure_guard /proc/modules 2>/dev/null; then
+      echo "UNLOAD_GUARD_STILL_LOADED"
+    else
+      echo "UNLOAD_GUARD_GONE"
+    fi
+  else
+    echo "UNLOAD_GUARD_SKIP"
+  fi
+}
+
 finish_manager() {
   cp -f "$KSUD" /data/local/tmp/ksud_official 2>/dev/null
   if [ "$DISABLE_ANTIROOT" = "1" ]; then
@@ -38,6 +54,7 @@ finish_manager() {
   else
     echo "ANTIROOT_SKIP: 开关关闭，未禁用安全组件"
   fi
+  unload_guard
   su -c "/data/local/tmp/ksud_official install" 2>&1
   echo "KSUD_INSTALL_RC=$?"
   install_manager_apk
