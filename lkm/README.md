@@ -29,7 +29,7 @@ docker run --rm \
 | `build-kernelsu.sh` | 官方 KernelSU v3.3.1 | 349,224 B |
 | `build-next.sh` | KernelSU Next | 350,000 B |
 | `build-bakasu.sh` | BakaSU 35252（v4.2.0-rc3） | 435,616 B |
-| `build-sukisu.sh` | SukiSU Ultra v4.2.1-r2（41068） | 535,328 B |
+| `build-sukisu.sh` | SukiSU Ultra 41097（HEAD 080ba098） | 544,848 B |
 | `build-susfs.sh` | SUSFS guard LKM（vendored） | 3,373,024 B（未 strip） |
 
 vermagic 均为 `6.18.21-4k SMP preempt mod_unload modversions aarch64`。
