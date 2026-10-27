@@ -34,7 +34,8 @@
 #include "ksu_umount_gate.h"	/* susfs_is_current_proc_umounted_app (issue #34) */
 #include "ksu_allow_gate.h"	/* susfs_control_visible(): the node gate is su's own */
 #include "susfs_kprobe.h"
-#include "patch_memory.h"	/* ksu_patch_text: swap seq_operations.show */
+#include "patch_memory.h"
+#include "susfs_fp_hook.h"	/* susfs_fp_drain: wait out in-flight wrappers */
 
 #define SUS_MAP_MAX 64
 
@@ -277,34 +278,22 @@ static int sus_map_skip_vma_pre(struct kprobe *kp, struct pt_regs *regs)
  * wrapper and rewinding seq_file->count keeps the landing pad intact. */
 static int sus_map_show_map_wrap(struct seq_file *m, void *v)
 {
-	size_t before;
-	int rc;
-
 	if (!m || !sus_map_orig_show)
 		return -EINVAL;
-	before = m->count;
-	rc = sus_map_orig_show(m, v);
-	if (sus_map_hide_vma((struct vm_area_struct *)v, "show_map")) {
-		m->count = before;
+	/* Decide before running the original, so a hidden vma costs no more than the
+	 * probe version that skipped the body (no timing fingerprint). */
+	if (sus_map_hide_vma((struct vm_area_struct *)v, "show_map"))
 		return 0;
-	}
-	return rc;
+	return sus_map_orig_show(m, v);
 }
 
 static int sus_map_show_smap_wrap(struct seq_file *m, void *v)
 {
-	size_t before;
-	int rc;
-
 	if (!m || !sus_map_orig_smap)
 		return -EINVAL;
-	before = m->count;
-	rc = sus_map_orig_smap(m, v);
-	if (sus_map_hide_vma((struct vm_area_struct *)v, "show_smap")) {
-		m->count = before;
+	if (sus_map_hide_vma((struct vm_area_struct *)v, "show_smap"))
 		return 0;
-	}
-	return rc;
+	return sus_map_orig_smap(m, v);
 }
 
 static struct kprobe kp_map = {
@@ -884,14 +873,17 @@ static void sus_map_arm_show_wrappers(void)
 			op = (const struct seq_operations *)addr;
 			orig = READ_ONCE(op->show);
 			wrap = sus_map_show_map_wrap;
+			sus_map_maps_op = op;
+			sus_map_orig_show = orig;
+			smp_wmb();
 			if (!ksu_patch_text((void *)&op->show, &wrap, sizeof(wrap),
 					    KSU_PATCH_TEXT_FLUSH_DCACHE)) {
-				sus_map_maps_op = op;
-				sus_map_orig_show = orig;
 				sus_map_show_armed = true;
 				SUSFS_LOGI("sus_map: show_map replaced at %px (original %px)\n",
 					   (void *)&op->show, (void *)orig);
 			} else {
+				sus_map_maps_op = NULL;
+				sus_map_orig_show = NULL;
 				pr_warn("sus_map: show_map replace failed\n");
 			}
 		}
@@ -905,14 +897,17 @@ static void sus_map_arm_show_wrappers(void)
 			op = (const struct seq_operations *)addr;
 			orig = READ_ONCE(op->show);
 			wrap = sus_map_show_smap_wrap;
+			sus_map_smaps_op = op;
+			sus_map_orig_smap = orig;
+			smp_wmb();
 			if (!ksu_patch_text((void *)&op->show, &wrap, sizeof(wrap),
 					    KSU_PATCH_TEXT_FLUSH_DCACHE)) {
-				sus_map_smaps_op = op;
-				sus_map_orig_smap = orig;
 				sus_map_smap_armed = true;
 				SUSFS_LOGI("sus_map: show_smap replaced at %px (original %px)\n",
 					   (void *)&op->show, (void *)orig);
 			} else {
+				sus_map_smaps_op = NULL;
+				sus_map_orig_smap = NULL;
 				pr_warn("sus_map: show_smap replace failed\n");
 			}
 		}
@@ -1232,6 +1227,9 @@ void susfs_sus_map_exit(void)
             pr_warn("sus_map: show_smap restore failed\n");
         sus_map_smap_armed = false;
     }
+    /* A caller can still be inside a wrapper after its entry is restored: wait
+     * for it before the module text may go away. */
+    susfs_fp_drain();
     sus_map_maps_op = NULL;
     sus_map_smaps_op = NULL;
     sus_map_orig_show = NULL;

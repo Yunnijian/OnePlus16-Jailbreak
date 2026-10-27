@@ -25,11 +25,12 @@ PYB110 内核开启 `CONFIG_ARM64_BTI_KERNEL=y`。kprobe 会把函数入口的 `
 
 ## 验证
 
-- 6.18.21 编译：vermagic `6.18.21-4k SMP preempt mod_unload modversions aarch64`；合并版 3,372,232 B，sha256 `d94713c3a4fb6a9ceab1f5bbe32dc94af3ccabd1bc50aeb66bfaa7e55232e856`。
+- 6.18.21 编译：vermagic `6.18.21-4k SMP preempt mod_unload modversions aarch64`；合并版 3,373,024 B，sha256 `c28d54130041a255d56e68fa2c02d2750ed25feb390b3b95fabe3334f1eada9f`。
 - 真机：SUSFS 版本 `v2.3.0`，`susfs supercall: armed via sys_call_table`；`/proc/kallsyms` / `/proc/modules` 的 susfs/ksu 行被隐藏；`/proc/susfs_*` 规则节点正常；普通 `reboot(2)` 走原函数返回 `EINVAL`，无 BTI。
 - sus_map：app 进程映射测试文件后读 `/proc/self/maps` 与 `/proc/self/smaps`，两处映射行都被隐藏（dmesg `hid show_map` / `hid show_smap`），无 BTI。
 - 规则矩阵：sus_path / kstat / open_redirect / hide_modules / sus_map / uname / opath / enable_log / avc_spoof 通过；详见 `../susfs-tools/README.md`。
 - 合并版真机复核（2026-10-27）：热替换加载正常、版本握手 v2.3.0；`/proc/susfs_map` 规则对 uid 10000 隐藏 maps/smaps；打开 BakaSU 管理器无 BTI/Oops。
+- show wrapper 加固（review 后）：saved original 先于 wrapper 指针发布并 `smp_wmb()`；卸载恢复后 `susfs_fp_drain()` 再清指针；隐藏判定前移，去掉 `seq_file->count` 回滚。真机复核：加载/规则/`rmmod` 正常。
 
 ## 已知问题
 

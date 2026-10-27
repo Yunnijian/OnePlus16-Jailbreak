@@ -249,6 +249,6 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 
 ## 校验和
 
-- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 30,612,686 B / md5 `288d04d3bee7fe1a87de3fa120af6b0f`（本地构建产物，不入库）。
+- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 30,613,110 B / md5 `d9dcf008fb6a413ceecc4318f10ff0e9`（本地构建产物，不入库）。
 - KernelSU LKM（6.18.21）：349,224 B；Next：350,000 B；BakaSU：435,616 B；SukiSU：535,328 B（strip 后）。
-- SUSFS guard LKM（6.18.21，内置 assets）：3,372,232 B / sha256 `d94713c3a4fb6a9ceab1f5bbe32dc94af3ccabd1bc50aeb66bfaa7e55232e856`（未 strip）。
+- SUSFS guard LKM（6.18.21，内置 assets）：3,373,024 B / sha256 `c28d54130041a255d56e68fa2c02d2750ed25feb390b3b95fabe3334f1eada9f`（未 strip）。

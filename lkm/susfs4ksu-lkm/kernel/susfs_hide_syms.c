@@ -22,7 +22,8 @@
 #include "susfs.h"		/* sus_path_add_self_hidden / sus_path_del_path */
 #include "symbol_resolver.h"	/* find_kernel_symbol_exact (kallsyms_op) */
 #include "susfs_kprobe.h"	/* susfs_kp_forget_addr: a probe struct must be usable twice */
-#include "patch_memory.h"	/* ksu_patch_text: swap seq_operations.show */
+#include "patch_memory.h"
+#include "susfs_fp_hook.h"	/* susfs_fp_drain: wait out in-flight wrappers */
 #include "ksu_allow_gate.h"	/* the control-node gate is su's own */
 
 /* ---- hide_modules: filter other kernel modules out of /proc/modules ----
@@ -678,15 +679,14 @@ static susfs_show_fn_t orig_m_show;
 static int hide_syms_s_show_wrap(struct seq_file *m, void *p)
 {
 	struct kallsym_iter_local *iter;
-	size_t before;
-	int rc;
 
 	if (!m || !orig_s_show)
 		return -EINVAL;
-	before = m->count;
-	rc = orig_s_show(m, p);
 	if (kallsyms_op_target && m->op != kallsyms_op_target)
-		return rc;
+		return orig_s_show(m, p);
+
+	/* Decide before running the original: a hidden line must cost the same as
+	 * the probe version, where the body never ran (no timing fingerprint). */
 	atomic_inc(&hide_enter_count);
 	iter = (struct kallsym_iter_local *)m->private;
 	if (!iter || !hide_syms_iter_plausible(iter)) {
@@ -696,42 +696,35 @@ static int hide_syms_s_show_wrap(struct seq_file *m, void *p)
 			else
 				pr_warn("susfs_hide_syms: non-kallsyms caller (m->private is not a struct kallsym_iter) - skipping it\n");
 		}
-		return rc;
+		return orig_s_show(m, p);
 	}
 	if (!iter->name[0])
-		return rc;
+		return orig_s_show(m, p);
 	if (name_should_hide(iter->name)) {
 		atomic_inc(&hide_hit_count);
-		m->count = before;
 		return 0;
 	}
 	if (iter->module_name[0] && hide_module_name_match(iter->module_name)) {
 		atomic_inc(&n_kallsyms_mod_skipped);
-		m->count = before;
 		return 0;
 	}
-	return rc;
+	return orig_s_show(m, p);
 }
 
 static int hide_syms_m_show_wrap(struct seq_file *m, void *p)
 {
 	struct module *mod;
-	size_t before;
-	int rc;
 
 	if (!m || !orig_m_show)
 		return -EINVAL;
-	before = m->count;
-	rc = orig_m_show(m, p);
 	if (modules_op_target && m->op != modules_op_target)
-		return rc;
+		return orig_m_show(m, p);
 	if (!p)
-		return rc;
+		return orig_m_show(m, p);
 	mod = (struct module *)((char *)p - offsetof(struct module, list));
 	if (!hide_module_name_match(mod->name))
-		return rc;
+		return orig_m_show(m, p);
 	atomic_inc(&n_modlines_skipped);
-	m->count = before;
 	return 0;
 }
 
@@ -845,14 +838,18 @@ int susfs_hide_syms_init(void)
 	}
 	image = READ_ONCE(op->show);
 	wrapper = hide_syms_s_show_wrap;
+	/* Publish the original before the pointer that reaches it: once the table
+	 * points at the wrapper, an SMP reader may run it immediately. */
+	orig_s_show = image;
+	kallsyms_op_target = op;
+	smp_wmb();
 	if (ksu_patch_text((void *)&op->show, &wrapper, sizeof(wrapper),
 			   KSU_PATCH_TEXT_FLUSH_DCACHE)) {
 		pr_warn("susfs_hide_syms: cannot replace kallsyms s_show\n");
 		kallsyms_op_target = NULL;
+		orig_s_show = NULL;
 		return -EIO;
 	}
-	orig_s_show = image;
-	kallsyms_op_target = op;
 	hide_registered = true;
 	SUSFS_LOGI("susfs_hide_syms: s_show replaced at %px (original %px)\n",
 			(void *)&op->show, (void *)image);
@@ -865,13 +862,15 @@ int susfs_hide_syms_init(void)
 	} else {
 		image = READ_ONCE(op->show);
 		wrapper = hide_syms_m_show_wrap;
+		orig_m_show = image;
+		modules_op_target = op;
+		smp_wmb();
 		if (ksu_patch_text((void *)&op->show, &wrapper, sizeof(wrapper),
 				   KSU_PATCH_TEXT_FLUSH_DCACHE)) {
 			pr_warn("susfs_hide_syms: cannot replace modules m_show\n");
 			modules_op_target = NULL;
+			orig_m_show = NULL;
 		} else {
-			orig_m_show = image;
-			modules_op_target = op;
 			m_show_registered = true;
 			SUSFS_LOGI("susfs_hide_syms: m_show replaced at %px (original %px)\n",
 					(void *)&op->show, (void *)image);
@@ -941,10 +940,6 @@ void susfs_hide_syms_exit(void)
 			pr_warn("susfs_hide_syms: s_show restore failed\n");
 		hide_registered = false;
 	}
-	orig_m_show = NULL;
-	orig_s_show = NULL;
-	modules_op_target = NULL;
-	kallsyms_op_target = NULL;
 	/* The /sys/module rules are ours: drop them here, not in sus_path's teardown - this layer cleans up what it registered. */
 	hide_modules_commit(hide_modules_applied, 0);
 	hide_modules_sync_sysfs();
@@ -952,4 +947,11 @@ void susfs_hide_syms_exit(void)
 		atomic_read(&hide_enter_count), atomic_read(&hide_hit_count),
 		atomic_read(&hide_layout_bad),
 		atomic_read(&n_modlines_skipped), atomic_read(&n_kallsyms_mod_skipped));
+	/* A caller can still be inside the wrapper after its entry is restored: wait
+	 * for it before the module text may go away. */
+	susfs_fp_drain();
+	orig_s_show = NULL;
+	orig_m_show = NULL;
+	kallsyms_op_target = NULL;
+	modules_op_target = NULL;
 }
