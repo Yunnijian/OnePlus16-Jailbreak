@@ -45,4 +45,11 @@ Third-party components
    License: Apache-2.0
    Used: remote process execution.
 
+9. SUSFS guard LKM (susfs4ksu-lkm)
+   Source: https://github.com/inforcqb/susfs4ksu-lkm (commit b69dee4)
+   License: GPL-2.0 (full text: lkm/susfs4ksu-lkm/LICENSE)
+   Used: vendored SUSFS loadable kernel module source under
+         lkm/susfs4ksu-lkm/. Local modifications for BTI kernels are listed in
+         lkm/susfs4ksu-lkm/MODIFICATIONS.md.
+
 The application icon is drawn by this project.

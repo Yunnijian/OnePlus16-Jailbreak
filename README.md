@@ -113,11 +113,14 @@ OnePlus16-Jailbreak/
 │   ├── scripts/run.sh           64560 主流程
 │   ├── scripts/take_slide.sh    抓 slide
 │   └── syms-6.18.21.txt         该内核的符号表
-├── lkm/                         LKM 构建脚本
+├── lkm/                         LKM 构建脚本与 SUSFS 源码
 │   ├── build-kernelsu.sh        官方 KernelSU
 │   ├── build-next.sh            KernelSU Next
 │   ├── build-bakasu.sh          BakaSU（原 ReSukiSU）
 │   ├── build-sukisu.sh          SukiSU Ultra
+│   ├── build-susfs.sh           SUSFS guard LKM
+│   ├── susfs4ksu-lkm/           SUSFS LKM 源码（上游 b69dee4，GPL-2.0）
+│   ├── susfs-tools/             SUSFS 规则矩阵测试工具
 │   └── README.md
 ├── docs/screenshots/            App 与管理器截图
 ├── third_party/                 上游工具与许可（CVE 公开仓库）
@@ -176,9 +179,14 @@ bash lkm/build-bakasu.sh
 
 # SukiSU Ultra
 bash lkm/build-sukisu.sh
+
+# SUSFS guard LKM（实验，见 lkm/README.md）
+bash lkm/build-susfs.sh
 ```
 
 64560 的 `finit_module` 与 98260 的 `insmod` 回退都需要设备端按当次 boot 的 KASLR slide 用 `prep_patch` 重写符号；98260 默认先尝试 `ksud late-load`，失败再回退到打补丁后的 `insmod`。管理器与 ksud 建议直接用官方 release / CI 产物（BakaSU 的 `Manager-release` 与 `ksud`），不要在本地重复编译。
+
+`lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `b69dee4`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall 和 hide_syms 的 kprobe 换成了 syscall / seq_operations wrapper；**sus_map 仍是 kprobe，会触发 BTI 重启，暂不要下发 map 规则**。规则矩阵与工具在 `lkm/susfs-tools/`。
 
 ### 设备端工具
 
@@ -234,6 +242,7 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 - KernelSU Next：[rifsxd/KernelSU-Next](https://github.com/rifsxd/KernelSU-Next)（GPL-2.0）。
 - BakaSU（原 ReSukiSU）：[Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU)（GPL-2.0）。
 - SukiSU Ultra：[SukiSU-Ultra/SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)（GPL-3.0）。
+- SUSFS guard LKM：[inforcqb/susfs4ksu-lkm](https://github.com/inforcqb/susfs4ksu-lkm)（GPL-2.0；源码 vendored 在 `lkm/susfs4ksu-lkm`，BTI 兼容修改见 `MODIFICATIONS.md`）。
 - UI：[Miuix](https://github.com/miuix-kotlin-multiplatform/miuix)（Apache-2.0）；远程执行：[Shizuku API](https://github.com/RikkaApps/Shizuku-API)（Apache-2.0）。
 - 本项目自研代码（App、exploit 封装、构建脚本）采用 MIT，详见 `LICENSE`；第三方二进制与源码遵循各自许可，详见 `NOTICE`。
 
