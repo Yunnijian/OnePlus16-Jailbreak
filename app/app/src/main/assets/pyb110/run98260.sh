@@ -39,6 +39,40 @@ install_manager_apk() {
   fi
 }
 
+load_susfs() {
+  if [ "${PYB110_SUSFS:-0}" != "1" ]; then
+    echo "SUSFS_SKIP"
+    return 0
+  fi
+  if [ ! -f "$D/susfs_guard_lkm.ko" ]; then
+    echo "SUSFS_MISSING"
+    return 0
+  fi
+  if su -c "test -d /sys/module/susfs_guard_lkm" 2>/dev/null; then
+    echo "SUSFS_ALREADY"
+    return 0
+  fi
+  loaded=0
+  for c in "$D/$KSUD" /data/adb/ksud /data/adb/ksu/bin/ksud; do
+    if ! su -c "test -x '$c'" 2>/dev/null; then continue; fi
+    echo "SUSFS_INSMOD_TRY=$c"
+    su -c "$c insmod '$D/susfs_guard_lkm.ko' expose_proc=1" 2>&1
+    sleep 1
+    if su -c "test -d /sys/module/susfs_guard_lkm" 2>/dev/null; then loaded=1; break; fi
+  done
+  if [ "$loaded" != "1" ]; then
+    echo "SUSFS_INSMOD_FALLBACK=insmod"
+    su -c "insmod '$D/susfs_guard_lkm.ko' expose_proc=1" 2>&1
+    sleep 1
+    if su -c "test -d /sys/module/susfs_guard_lkm" 2>/dev/null; then loaded=1; fi
+  fi
+  if [ "$loaded" = "1" ]; then
+    echo "SUSFS_LOADED"
+  else
+    echo "SUSFS_LOAD_FAIL"
+  fi
+}
+
 finish_manager() {
   cp -f "$KSUD" /data/local/tmp/ksud_official 2>/dev/null
   unload_guard
@@ -64,6 +98,7 @@ finish_manager() {
   else
     echo "ROOTD_KEPT: su 不可用，保留 rootd 兜底"
   fi
+  load_susfs
   am force-stop "$MPKG" 2>/dev/null
   monkey -p "$MPKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 }
