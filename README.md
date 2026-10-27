@@ -186,7 +186,7 @@ bash lkm/build-susfs.sh
 
 64560 的 `finit_module` 与 98260 的 `insmod` 回退都需要设备端按当次 boot 的 KASLR slide 用 `prep_patch` 重写符号；98260 默认先尝试 `ksud late-load`，失败再回退到打补丁后的 `insmod`。管理器与 ksud 建议直接用官方 release / CI 产物（BakaSU 的 `Manager-release` 与 `ksud`），不要在本地重复编译。
 
-`lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `b69dee4`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall 和 hide_syms 的 kprobe 换成了 syscall / seq_operations wrapper；**sus_map 仍是 kprobe，会触发 BTI 重启，暂不要下发 map 规则**。规则矩阵与工具在 `lkm/susfs-tools/`。
+`lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `b69dee4`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall、hide_syms 以及 sus_map 的间接 show 入口都换成了 syscall / seq_operations wrapper；`sus_map` 只对 KernelSU 会 umount 的 app 生效，`su` 授予 root 的进程不隐藏。规则矩阵与工具在 `lkm/susfs-tools/`。
 
 ### 设备端工具
 

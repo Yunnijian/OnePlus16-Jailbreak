@@ -95,8 +95,21 @@ cat /proc/susfs_hide_mounts 2>/dev/null | grep -q "$T/mnt/" && ok "hide_mounts p
 echo "del $T/mnt/" > /proc/susfs_hide_mounts 2>/dev/null
 cat /proc/susfs_hide_mounts 2>/dev/null | grep -q "$T/mnt/" && bad "hide_mounts prefix del" || ok "hide_mounts prefix del"
 
-echo "=== 9. advanced (not exercised) ==="
-skip "sus_map: needs a mapped .so/VMA probe; add-only rule has no proc clear"
+echo "=== 9. sus_map (app uid 10000) ==="
+if [ ! -x /data/local/tmp/map_probe ]; then
+	skip "sus_map: /data/local/tmp/map_probe missing"
+else
+	dd if=/dev/zero of="$T/mapped" bs=4096 count=1 2>/dev/null
+	chmod 644 "$T/mapped"
+	out=$(r10000 "/data/local/tmp/map_probe $T/mapped" 2>/dev/null)
+	[ -n "$out" ] && ok "map visible before rule" || bad "map not visible before rule"
+	$CTL map "$T/mapped" >/dev/null 2>&1
+	out=$(r10000 "/data/local/tmp/map_probe $T/mapped" 2>/dev/null)
+	[ -z "$out" ] && ok "sus_map maps/smaps hidden" || bad "sus_map still visible: $out"
+	note "sus_map rule is add-only; reload the module to clear it"
+fi
+
+echo "=== 10. advanced (not exercised) ==="
 skip "spoof_cmdline: persistent /proc/cmdline spoof; restore requires module reload"
 skip "sus_mount actual hide: bind mount under /data/local/tmp is not marked (rescans=0 recorded=0)"
 

@@ -18,6 +18,7 @@
 #include <linux/version.h>	/* LINUX_VERSION_CODE: mm->mmap vs mm->mm_mt (6.1) */
 #include <linux/namei.h>
 #include <linux/dcache.h>
+#include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include <linux/err.h>		/* IS_ERR/ERR_PTR for the getlink hook */
 #include <linux/cred.h>		/* current_uid(), for the read gate */
@@ -31,6 +32,7 @@
 #include "symbol_resolver.h"	/* find_kernel_symbol_exact, for the walk ops */
 #include "ksu_umount_gate.h"	/* susfs_is_current_proc_umounted_app (issue #34) */
 #include "susfs_kprobe.h"
+#include "patch_memory.h"	/* ksu_patch_text: swap seq_operations.show */
 
 #define SUS_MAP_MAX 64
 
@@ -41,6 +43,14 @@ struct sus_map_entry {
 
 static struct sus_map_entry map_entries[SUS_MAP_MAX];
 static int nmap;
+
+typedef int (*susfs_show_fn_t)(struct seq_file *, void *);
+static const struct seq_operations *sus_map_maps_op;
+static const struct seq_operations *sus_map_smaps_op;
+static susfs_show_fn_t sus_map_orig_show;
+static susfs_show_fn_t sus_map_orig_smap;
+static bool sus_map_show_armed;
+static bool sus_map_smap_armed;
 
 /* Serialises rule PUBLICATION only; the reader stays lock-free: entries are append-only
  * (kstat's are replaced wholesale, hence its reader-side snapshot), so a release/acquire
@@ -131,37 +141,75 @@ static atomic_t n_show_hides = ATOMIC_INIT(0);
  * Unreachable from a kprobe too: upstream skips the vma *inside* the rollup loop, and
  * smap_gather_stats() is inlined by LTO here (absent from /proc/kallsyms), so only
  * walk_page_range() could be intercepted. */
+static bool sus_map_hide_vma(struct vm_area_struct *vma, const char *where)
+{
+	struct inode *inode;
+
+	if (!sus_map_gate_ok())
+		return false;
+	/* A vma is always a slab object in the linear map; anything below one page is
+	 * not one (also guards the single_open() sentinel). */
+	if ((unsigned long)vma < PAGE_SIZE)
+		return false;
+	if (!vma->vm_file)
+		return false;
+	inode = file_inode(vma->vm_file);
+	if (!inode)
+		return false;
+	if (!sus_map_lookup(inode->i_ino, inode->i_sb->s_dev))
+		return false;
+	atomic_inc(&n_show_hides);
+	pr_info_ratelimited("sus_map: hid %s line (ino=%lu dev=%lu uid=%u)\n",
+			    where, inode->i_ino,
+			    (unsigned long)inode->i_sb->s_dev,
+			    current_uid().val);
+	return true;
+}
+
 static int sus_map_skip_vma_pre(struct kprobe *kp, struct pt_regs *regs)
 {
-    struct vm_area_struct *vma;
-    struct inode *inode;
+	struct vm_area_struct *vma = (struct vm_area_struct *)regs->regs[1];
 
-    if (!sus_map_gate_ok())
-        return 0;
+	if (!sus_map_hide_vma(vma, kp->symbol_name))
+		return 0;
+	regs_set_return_value(regs, 0);
+	regs->pc = regs->regs[30];
+	return 1;
+}
 
-    vma = (struct vm_area_struct *)regs->regs[1];
-    /* Defence in depth against the sentinel above: a vma is always a slab object in
-     * the linear map, so anything below one page is not one - this turns a future
-     * mis-registration into a lost filter, not a panic. */
-    if ((unsigned long)vma < PAGE_SIZE)
-        return 0;
-    if (!vma->vm_file)
-        return 0;
-    inode = file_inode(vma->vm_file);
-    if (!inode)
-        return 0;
-    if (sus_map_lookup(inode->i_ino, inode->i_sb->s_dev)) {
-        atomic_inc(&n_show_hides);
-        /* ratelimited like sus_path's; the rule stores no path, so ino/dev name it */
-        pr_info_ratelimited("sus_map: hid %s line (ino=%lu dev=%lu uid=%u)\n",
-                            kp->symbol_name, inode->i_ino,
-                            (unsigned long)inode->i_sb->s_dev,
-                            current_uid().val);
-        regs_set_return_value(regs, 0);
-        regs->pc = regs->regs[30];
-        return 1;
-    }
-    return 0;
+/* seq_operations.show replacements for maps/smaps.  The originals are the functions
+ * whose entry kprobes used to replace the BTI landing pad; calling them from a module
+ * wrapper and rewinding seq_file->count keeps the landing pad intact. */
+static int sus_map_show_map_wrap(struct seq_file *m, void *v)
+{
+	size_t before;
+	int rc;
+
+	if (!m || !sus_map_orig_show)
+		return -EINVAL;
+	before = m->count;
+	rc = sus_map_orig_show(m, v);
+	if (sus_map_hide_vma((struct vm_area_struct *)v, "show_map")) {
+		m->count = before;
+		return 0;
+	}
+	return rc;
+}
+
+static int sus_map_show_smap_wrap(struct seq_file *m, void *v)
+{
+	size_t before;
+	int rc;
+
+	if (!m || !sus_map_orig_smap)
+		return -EINVAL;
+	before = m->count;
+	rc = sus_map_orig_smap(m, v);
+	if (sus_map_hide_vma((struct vm_area_struct *)v, "show_smap")) {
+		m->count = before;
+		return 0;
+	}
+	return rc;
 }
 
 static struct kprobe kp_map = {
@@ -713,6 +761,55 @@ static DEFINE_MUTEX(map_ctl_lock);
 /* Registers whichever of the probes are not up yet.  Called from init (when a rule
  * already exists) and from the supercall that adds the first rule, so both paths arm
  * exactly the same set. */
+static void sus_map_arm_show_wrappers(void)
+{
+	const struct seq_operations *op;
+	susfs_show_fn_t orig, wrap;
+	unsigned long addr;
+
+	if (!sus_map_show_armed) {
+		addr = find_kernel_symbol_exact("proc_pid_maps_op");
+		if (!addr) {
+			pr_warn("sus_map: proc_pid_maps_op not found - maps outer filter off\n");
+		} else {
+			op = (const struct seq_operations *)addr;
+			orig = READ_ONCE(op->show);
+			wrap = sus_map_show_map_wrap;
+			if (!ksu_patch_text((void *)&op->show, &wrap, sizeof(wrap),
+					    KSU_PATCH_TEXT_FLUSH_DCACHE)) {
+				sus_map_maps_op = op;
+				sus_map_orig_show = orig;
+				sus_map_show_armed = true;
+				SUSFS_LOGI("sus_map: show_map replaced at %px (original %px)\n",
+					   (void *)&op->show, (void *)orig);
+			} else {
+				pr_warn("sus_map: show_map replace failed\n");
+			}
+		}
+	}
+
+	if (!sus_map_smap_armed) {
+		addr = find_kernel_symbol_exact("proc_pid_smaps_op");
+		if (!addr) {
+			pr_warn("sus_map: proc_pid_smaps_op not found - smaps outer filter off\n");
+		} else {
+			op = (const struct seq_operations *)addr;
+			orig = READ_ONCE(op->show);
+			wrap = sus_map_show_smap_wrap;
+			if (!ksu_patch_text((void *)&op->show, &wrap, sizeof(wrap),
+					    KSU_PATCH_TEXT_FLUSH_DCACHE)) {
+				sus_map_smaps_op = op;
+				sus_map_orig_smap = orig;
+				sus_map_smap_armed = true;
+				SUSFS_LOGI("sus_map: show_smap replaced at %px (original %px)\n",
+					   (void *)&op->show, (void *)orig);
+			} else {
+				pr_warn("sus_map: show_smap replace failed\n");
+			}
+		}
+	}
+}
+
 static int sus_map_register_probes(void)
 {
     int i, n = 0, first_err = 0;
@@ -721,11 +818,17 @@ static int sus_map_register_probes(void)
     mutex_lock(&map_ctl_lock);
 
     sus_map_resolve_walk_ops();
+    sus_map_arm_show_wrappers();
 
     for (i = 0; i < (int)N_MAP_PROBES; i++) {
         int rc;
 
         if (map_probe_armed[i])
+            continue;
+        /* show_map/show_smap are seq_operations.show, reached indirectly from seq_read().
+         * Kprobes there replace the BTI landing pad and panic; show_map_vma is called
+         * directly by both and its probe still filters the line. */
+        if (map_probes[i] == &kp_map_smap || map_probes[i] == &kp_map_outer)
             continue;
         if ((map_probes[i] == &kp_map_walk || map_probes[i] == &kp_map_walk_vma) &&
             !sus_map_walk_ops_any())
@@ -765,7 +868,7 @@ static int sus_map_register_probes(void)
         }
     }
 
-    map_registered = map_probe_armed[0];   /* show_map_vma is the required one */
+    map_registered = map_probe_armed[0] || sus_map_show_armed || sus_map_smap_armed;
     ret = map_registered ? 0 : first_err;
 
     mutex_unlock(&map_ctl_lock);
@@ -813,6 +916,28 @@ void susfs_sus_map_exit(void)
         susfs_krp_forget_addr(&kr_map_files);
         kr_map_files_ok = false;
     }
+    if (sus_map_show_armed) {
+        susfs_show_fn_t orig = sus_map_orig_show;
+
+        if (!sus_map_maps_op || !orig ||
+            ksu_patch_text((void *)&sus_map_maps_op->show, &orig, sizeof(orig),
+                           KSU_PATCH_TEXT_FLUSH_DCACHE))
+            pr_warn("sus_map: show_map restore failed\n");
+        sus_map_show_armed = false;
+    }
+    if (sus_map_smap_armed) {
+        susfs_show_fn_t orig = sus_map_orig_smap;
+
+        if (!sus_map_smaps_op || !orig ||
+            ksu_patch_text((void *)&sus_map_smaps_op->show, &orig, sizeof(orig),
+                           KSU_PATCH_TEXT_FLUSH_DCACHE))
+            pr_warn("sus_map: show_smap restore failed\n");
+        sus_map_smap_armed = false;
+    }
+    sus_map_maps_op = NULL;
+    sus_map_smaps_op = NULL;
+    sus_map_orig_show = NULL;
+    sus_map_orig_smap = NULL;
     map_registered = false;
     mutex_unlock(&map_ctl_lock);
 

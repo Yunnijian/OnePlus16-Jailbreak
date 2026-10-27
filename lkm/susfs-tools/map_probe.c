@@ -4,12 +4,28 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+static int scan(const char *path, const char *needle, const char *tag)
+{
+	FILE *f = fopen(path, "r");
+	char line[1024];
+	int found = 0;
+
+	if (!f)
+		return -1;
+	while (fgets(line, sizeof(line), f)) {
+		if (strstr(line, needle)) {
+			printf("%s %s", tag, line);
+			found = 1;
+		}
+	}
+	fclose(f);
+	return found;
+}
+
 int main(int argc, char **argv)
 {
-	int fd, found = 0;
+	int fd, m, s;
 	void *p;
-	FILE *f;
-	char line[1024];
 
 	if (argc != 2)
 		return 2;
@@ -19,17 +35,9 @@ int main(int argc, char **argv)
 	p = mmap(NULL, 4096, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (p == MAP_FAILED)
 		return 4;
-	f = fopen("/proc/self/maps", "r");
-	if (!f)
-		return 5;
-	while (fgets(line, sizeof(line), f)) {
-		if (strstr(line, argv[1])) {
-			printf("MAP %s", line);
-			found = 1;
-		}
-	}
-	fclose(f);
+	m = scan("/proc/self/maps", argv[1], "MAP");
+	s = scan("/proc/self/smaps", argv[1], "SMAP");
 	munmap(p, 4096);
 	close(fd);
-	return found ? 0 : 1;
+	return (m > 0 || s > 0) ? 0 : 1;
 }
