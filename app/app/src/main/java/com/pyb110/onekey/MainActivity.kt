@@ -32,8 +32,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.DeveloperBoard
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.RemoveModerator
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Smartphone
@@ -228,7 +232,7 @@ class MainActivity : ComponentActivity() {
                                             selectedIndex = exploit.ordinal,
                                             startAction = {
                                                 Icon(
-                                                    imageVector = Icons.Filled.Security,
+                                                    imageVector = Icons.Filled.BugReport,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
                                                     tint = MiuixTheme.colorScheme.onBackground
@@ -243,7 +247,7 @@ class MainActivity : ComponentActivity() {
                                             onCheckedChange = { updateAntiRootGuard(it) },
                                             startAction = {
                                                 Icon(
-                                                    imageVector = Icons.Filled.Security,
+                                                    imageVector = Icons.Filled.NotificationsOff,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
                                                     tint = MiuixTheme.colorScheme.onBackground
@@ -271,7 +275,7 @@ class MainActivity : ComponentActivity() {
                                             onCheckedChange = { updateUnloadGuard(it) },
                                             startAction = {
                                                 Icon(
-                                                    imageVector = Icons.Filled.Security,
+                                                    imageVector = Icons.Filled.RemoveModerator,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
                                                     tint = MiuixTheme.colorScheme.onBackground
@@ -285,7 +289,7 @@ class MainActivity : ComponentActivity() {
                                             onCheckedChange = { updateSusfsSupport(it) },
                                             startAction = {
                                                 Icon(
-                                                    imageVector = Icons.Filled.Fingerprint,
+                                                    imageVector = Icons.Filled.Extension,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
                                                     tint = MiuixTheme.colorScheme.onBackground
