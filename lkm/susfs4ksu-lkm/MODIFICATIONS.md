@@ -1,6 +1,6 @@
 # 修改说明
 
-上游：[`inforcqb/susfs4ksu-lkm`](https://github.com/inforcqb/susfs4ksu-lkm) commit `b69dee4`（GPL-2.0，见 `LICENSE`）。
+上游：[`inforcqb/susfs4ksu-lkm`](https://github.com/inforcqb/susfs4ksu-lkm)（GPL-2.0，见 `LICENSE`）。基线 `b69dee4`，2026-10-27 已 rebase 到 `28b2e85`（`sus_map: expose rules through /proc/susfs_map`）。
 
 PYB110 内核开启 `CONFIG_ARM64_BTI_KERNEL=y`。kprobe 会把函数入口的 `bti c` 替换成断点，而 `invoke_syscall` / `seq_read` / `show_map` 通过函数指针间接跳转时会先做 BTI 检查，结果就是 `Oops - BTI`。本目录改了三个文件：
 
@@ -21,13 +21,15 @@ PYB110 内核开启 `CONFIG_ARM64_BTI_KERNEL=y`。kprobe 会把函数入口的 `
 - 去掉 `show_map` / `show_smap` 上的 kprobe（它们是 `/proc/<pid>/maps` / `smaps` 的 `seq_operations.show`，被 `seq_read` 间接调用）。
 - 解析 `proc_pid_maps_op` / `proc_pid_smaps_op`，用 `ksu_patch_text()` 换成模块 wrapper；wrapper 先调用原 show，命中规则时回滚 `seq_file->count`。
 - `show_map_vma` 是 `show_map`/`show_smap` 直接调用的内层函数，保留 kprobe，BTI 检查不经过它。
+- 与上游 `28b2e85` 的 `/proc/susfs_map` 合并：两处外层 kprobe 仍跳过，wrapper 改在 `sus_map_register_probes()` 里与新的 `/proc` 节点一起 arm；`map_registered` 与 smaps 告警改看 wrapper 的 arm 状态。
 
 ## 验证
 
-- 6.18.21 编译：vermagic `6.18.21-4k SMP preempt mod_unload modversions aarch64`。
+- 6.18.21 编译：vermagic `6.18.21-4k SMP preempt mod_unload modversions aarch64`；合并版 3,372,232 B，sha256 `d94713c3a4fb6a9ceab1f5bbe32dc94af3ccabd1bc50aeb66bfaa7e55232e856`。
 - 真机：SUSFS 版本 `v2.3.0`，`susfs supercall: armed via sys_call_table`；`/proc/kallsyms` / `/proc/modules` 的 susfs/ksu 行被隐藏；`/proc/susfs_*` 规则节点正常；普通 `reboot(2)` 走原函数返回 `EINVAL`，无 BTI。
 - sus_map：app 进程映射测试文件后读 `/proc/self/maps` 与 `/proc/self/smaps`，两处映射行都被隐藏（dmesg `hid show_map` / `hid show_smap`），无 BTI。
 - 规则矩阵：sus_path / kstat / open_redirect / hide_modules / sus_map / uname / opath / enable_log / avc_spoof 通过；详见 `../susfs-tools/README.md`。
+- 合并版真机复核（2026-10-27）：热替换加载正常、版本握手 v2.3.0；`/proc/susfs_map` 规则对 uid 10000 隐藏 maps/smaps；打开 BakaSU 管理器无 BTI/Oops。
 
 ## 已知问题
 

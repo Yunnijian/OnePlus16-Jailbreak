@@ -119,7 +119,7 @@ OnePlus16-Jailbreak/
 │   ├── build-bakasu.sh          BakaSU（原 ReSukiSU）
 │   ├── build-sukisu.sh          SukiSU Ultra
 │   ├── build-susfs.sh           SUSFS guard LKM
-│   ├── susfs4ksu-lkm/           SUSFS LKM 源码（上游 b69dee4，GPL-2.0）
+│   ├── susfs4ksu-lkm/           SUSFS LKM 源码（上游 28b2e85，GPL-2.0）
 │   ├── susfs-tools/             SUSFS 规则矩阵测试工具
 │   └── README.md
 ├── docs/screenshots/            App 与管理器截图
@@ -186,7 +186,7 @@ bash lkm/build-susfs.sh
 
 64560 的 `finit_module` 与 98260 的 `insmod` 回退都需要设备端按当次 boot 的 KASLR slide 用 `prep_patch` 重写符号；98260 默认先尝试 `ksud late-load`，失败再回退到打补丁后的 `insmod`。管理器与 ksud 建议直接用官方 release / CI 产物（BakaSU 的 `Manager-release` 与 `ksud`），不要在本地重复编译。
 
-`lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `b69dee4`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall、hide_syms 以及 sus_map 的间接 show 入口都换成了 syscall / seq_operations wrapper；`sus_map` 只对 KernelSU 会 umount 的 app 生效，`su` 授予 root 的进程不隐藏。规则矩阵与工具在 `lkm/susfs-tools/`。构建产物已内置到 App：开启「SUSFS 支持」开关后，越狱成功的流程末尾会自动把它部署到设备并 `ksud insmod`。
+`lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `28b2e85`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall、hide_syms 以及 sus_map 的间接 show 入口都换成了 syscall / seq_operations wrapper（并适配上游新增的 `/proc/susfs_map` 规则节点）；`sus_map` 只对 KernelSU 会 umount 的 app 生效，`su` 授予 root 的进程不隐藏。规则矩阵与工具在 `lkm/susfs-tools/`。构建产物已内置到 App：开启「SUSFS 支持」开关后，越狱成功的流程末尾会自动把它部署到设备并 `ksud insmod`。
 
 ### 设备端工具
 
@@ -249,5 +249,6 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 
 ## 校验和
 
-- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 30,603,722 B / md5 `0148cbbd28eeabcb55a6dc2b8754fc95`（本地构建产物，不入库）。
+- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 30,612,686 B / md5 `288d04d3bee7fe1a87de3fa120af6b0f`（本地构建产物，不入库）。
 - KernelSU LKM（6.18.21）：349,224 B；Next：350,000 B；BakaSU：435,616 B；SukiSU：535,328 B（strip 后）。
+- SUSFS guard LKM（6.18.21，内置 assets）：3,372,232 B / sha256 `d94713c3a4fb6a9ceab1f5bbe32dc94af3ccabd1bc50aeb66bfaa7e55232e856`（未 strip）。

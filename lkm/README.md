@@ -30,13 +30,13 @@ docker run --rm \
 | `build-next.sh` | KernelSU Next | 350,000 B |
 | `build-bakasu.sh` | BakaSU 35252（v4.2.0-rc3） | 435,616 B |
 | `build-sukisu.sh` | SukiSU Ultra v4.2.1-r2（41068） | 535,328 B |
-| `build-susfs.sh` | SUSFS guard LKM（vendored） | 3,351,200 B（未 strip） |
+| `build-susfs.sh` | SUSFS guard LKM（vendored） | 3,372,232 B（未 strip） |
 
 vermagic 均为 `6.18.21-4k SMP preempt mod_unload modversions aarch64`。
 
 ## SUSFS guard LKM（实验）
 
-源码 vendored 在 [susfs4ksu-lkm](susfs4ksu-lkm/)（upstream `inforcqb/susfs4ksu-lkm` commit `b69dee4`，GPL-2.0）。
+源码 vendored 在 [susfs4ksu-lkm](susfs4ksu-lkm/)（upstream `inforcqb/susfs4ksu-lkm`，基线 `b69dee4`，2026-10-27 rebase 到 `28b2e85`，GPL-2.0）。
 为 PYB110 的 `CONFIG_ARM64_BTI_KERNEL=y` 做了三处改动，详见 [MODIFICATIONS.md](susfs4ksu-lkm/MODIFICATIONS.md)：
 
 - supercall：`__arm64_sys_reboot` 的 kprobe 换成 `sys_call_table[__NR_reboot]` 模块 wrapper
