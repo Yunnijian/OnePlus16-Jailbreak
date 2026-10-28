@@ -34,6 +34,15 @@ PYB110 内核开启 `CONFIG_ARM64_BTI_KERNEL=y`。kprobe 会把函数入口的 `
 - **init 函数 BTI**：`susfs_self_hide_nodes` 原是 static，编译器不给 landing pad；模块装载位置变化触发 linker veneer 时会 `Oops - BTI`。改为全局符号后入口生成 `bti c`。
 - show wrapper 加固（review 后）：saved original 先于 wrapper 指针发布并 `smp_wmb()`；卸载恢复后 `susfs_fp_drain()` 再清指针；隐藏判定前移，去掉 `seq_file->count` 回滚。真机复核：加载/规则/`rmmod` 正常。
 
+## openat2 wrapper 加固（2026-10-28）
+
+一次真机 Oops（`lr : susfs_opath_openat2+0x48/0xac`，`pc` 为用户态指针）定位到 `susfs_or_entry_hook` 被写成了野指针。根因是表项残留时新加载会把旧 wrapper 当作 original 继续链接，之后执行到已释放模块的 `.bss`。
+
+- `susfs_fp_hook.c`：install 前校验表项——必须是该 syscall 的 plain / `.cfi_jt`、其他存活模块的 wrapper、或 `kernel_text_address()` 认可的内核 text；本模块自身、已释放地址、野指针一律 `-EBUSY`。remove 分别还原 native / compat 两表并回读确认，不再因 native 不是我们的而跳过 compat。
+- `susfs_opath.c` / `susfs_or_entry.c`：五个 wrapper 调用前比较 `susfs_or_entry_hook` 与 `or_entry_redirect`，不一致就当作无 hook 继续走 original。
+- `__nocfi noinline` 保持 `cfi_sites.py` 门禁通过；UNDEF 仍为 114，`syms.txt` 全覆盖。
+- 真机：3 轮 `rmmod` / `susfs_insmod` 循环通过，`opath 5/5`、`kstat 14/14`，无 `refusing to chain` / panic。ko 3,456,440 B，sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`。
+
 ## 已知问题
 
 - `hide_mounts` 的任意 bind mount 不会被标记（`recorded=0`）；实际挂载隐藏未验证。

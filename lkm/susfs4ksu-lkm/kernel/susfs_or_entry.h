@@ -30,6 +30,12 @@ typedef long (*susfs_or_entry_fn_t)(const struct pt_regs *regs, int kind);
 
 extern susfs_or_entry_fn_t susfs_or_entry_hook;
 
+/* The only value susfs_or_entry_hook may hold once the layer is armed.  The syscall wrappers
+ * compare against it before the indirect call: a slot corrupted to anything else (observed
+ * once as a userspace pointer in .bss) degrades to "no hook" instead of a jump to an arbitrary
+ * address. */
+susfs_or_entry_fn_t susfs_or_entry_expected_hook(void);
+
 /* True once redirection can actually happen.  The open_redirect layer checks this when a rule is added:
  * a rule that cannot fire is worse than no rule, so it refuses rather than register one. */
 static inline bool susfs_or_entry_armed(void)

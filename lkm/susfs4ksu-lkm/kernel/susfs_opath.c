@@ -385,6 +385,11 @@ __nocfi long susfs_opath_post_fd(long ret)
 		susfs_or_entry_fn_t or_hook = READ_ONCE(susfs_or_entry_hook);	\
 		long ret;						\
 									\
+		if (or_hook && or_hook != susfs_or_entry_expected_hook()) {	\
+			pr_warn_ratelimited("%s: or_entry hook %px is not the expected function - ignoring\n", __func__, (void *)or_hook); \
+			or_hook = NULL;					\
+		}							\
+									\
 		if (!orig)						\
 			return -ENOSYS;					\
 		atomic_inc(&n_opath_seen);				\

@@ -70,6 +70,88 @@ static int fp_compat_nr(const struct susfs_fp_hook *h)
 	return h->nr_compat ? h->nr_compat : -1;
 }
 
+/* The table must hold the kernel's own entry for h->sym (the plain symbol or its CFI jump-table
+ * stub), or - legitimately - a wrapper installed by another live module (KernelSU's sucompat).
+ * Anything else, in particular our own wrapper left behind by an earlier load or an address in
+ * a module that has already been unloaded, must never be adopted as "the original": chaining to
+ * it would run text the loader may have freed.  That is exactly how an openat2 call ended up in
+ * a stale susfs_opath_openat2 whose .bss no longer belonged to us:
+ *
+ *     Unable to handle kernel paging request at virtual address 0027f9cd2928d500
+ *     pc : 0x27f9cd2928d500
+ *     lr : susfs_opath_openat2+0x48/0xac [susfs_guard_lkm]
+ *
+ * Some kstat entries have no resolvable kallsyms name (their ->sym is not what the table holds),
+ * so a name match alone is not enough: kernel_text_address() is the fallback that accepts those
+ * genuine kernel stubs without accepting a freed vmalloc address.
+ *
+ * __nocfi + noinline: the two probes call kernel functions through pointers, and LTO must not
+ * fold that call into susfs_fp_install() (not __nocfi).  The CFI gate checks the artifact. */
+static struct module *(*fp_module_address_fn)(unsigned long addr);
+static int (*fp_kernel_text_fn)(unsigned long addr);
+static bool fp_validate_fns_looked_up;
+
+static void fp_lookup_validate_fns(void)
+{
+	if (fp_validate_fns_looked_up)
+		return;
+	fp_module_address_fn = (void *)find_kernel_symbol_exact("__module_address");
+	fp_kernel_text_fn = (void *)find_kernel_symbol_exact("kernel_text_address");
+	fp_validate_fns_looked_up = true;
+	if (!fp_module_address_fn || !fp_kernel_text_fn)
+		pr_warn("susfs_fp: validation helpers missing (__module_address=%d kernel_text_address=%d) - falling back to name matching only\n",
+			!!fp_module_address_fn, !!fp_kernel_text_fn);
+}
+
+static __nocfi noinline struct module *fp_call_module_address(unsigned long addr)
+{
+	return fp_module_address_fn(addr);
+}
+
+static __nocfi noinline int fp_call_kernel_text(unsigned long addr)
+{
+	return fp_kernel_text_fn(addr);
+}
+
+static __nocfi noinline bool fp_entry_is_kernel_original(const struct susfs_fp_hook *h,
+							 susfs_syscall_fn_t entry)
+{
+	susfs_syscall_fn_t plain, cfi;
+	char cfi_name[128];
+	struct module *owner;
+
+	plain = (susfs_syscall_fn_t)find_kernel_symbol_exact(h->sym);
+	snprintf(cfi_name, sizeof(cfi_name), "%s.cfi_jt", h->sym);
+	cfi = (susfs_syscall_fn_t)find_kernel_symbol_exact(cfi_name);
+
+	if ((plain && entry == plain) || (cfi && entry == cfi))
+		return true;
+
+	fp_lookup_validate_fns();
+
+	if (fp_module_address_fn) {
+		owner = fp_call_module_address((unsigned long)entry);
+		if (owner) {
+			if (owner == THIS_MODULE) {
+				pr_warn("susfs_fp: %s: table entry %px is inside this module (stale wrapper) - refusing to chain to it\n",
+					h->name, (void *)entry);
+				return false;
+			}
+			/* Another live module's wrapper: legitimate chaining (e.g. KernelSU). */
+			pr_info("susfs_fp: %s: chaining to live module entry %px (owner %s)\n",
+				h->name, (void *)entry, owner->name);
+			return true;
+		}
+	}
+
+	if (fp_kernel_text_fn && fp_call_kernel_text((unsigned long)entry))
+		return true;	/* genuine kernel stub whose kallsyms name did not match */
+
+	pr_warn("susfs_fp: %s: table entry %px is not kernel text (plain=%px cfi_jt=%px) - refusing to chain to it (stale wrapper?)\n",
+		h->name, (void *)entry, (void *)plain, (void *)cfi);
+	return false;
+}
+
 /* One table patch, with the same ordering rule for both tables: the wrapper reads
  * its original out of the module slot, so the slot is published first and the
  * write is verified afterwards. */
@@ -239,6 +321,8 @@ int susfs_fp_install(struct susfs_fp_hook *h)
 			pr_warn("susfs_fp: %s: table entry is NULL\n", h->name);
 			return -ENOENT;
 		}
+		if (!fp_entry_is_kernel_original(h, old))
+			return -EBUSY;
 
 		/* Publish the original BEFORE the table points at us: the wrapper reads this
 		 * slot, so a table entry that is live while the slot is still NULL would jump
@@ -268,6 +352,14 @@ int susfs_fp_install(struct susfs_fp_hook *h)
 			if (!cold) {
 				pr_warn("susfs_fp: %s: compat entry %d is NULL\n",
 					h->name, cnr);
+			} else if (!fp_entry_is_kernel_original(h, cold)) {
+				/* Same rule as the native entry: never chain to a stale
+				 * wrapper.  Undo the native half so the two tables stay
+				 * consistent. */
+				if (native_done)
+					ksu_patch_text(&sys_call_table_ptr[h->nr], &h->orig,
+						       sizeof(h->orig), KSU_PATCH_TEXT_FLUSH_DCACHE);
+				return -EBUSY;
 			} else {
 				h->orig_compat = cold;
 				if (h->orig_slot_compat)
@@ -307,35 +399,47 @@ int susfs_fp_install(struct susfs_fp_hook *h)
 void susfs_fp_remove(struct susfs_fp_hook *h)
 {
 	int cnr, err;
+	bool native_ours, compat_ours;
 
 	if (!h->installed || !sys_call_table_ptr)
 		return;
 
 	cnr = fp_compat_nr(h);
+	native_ours = h->nr >= 0 &&
+		READ_ONCE(sys_call_table_ptr[h->nr]) == h->wrapper;
+	compat_ours = cnr >= 0 && compat_sys_call_table_ptr && h->orig_compat &&
+		READ_ONCE(compat_sys_call_table_ptr[cnr]) == h->wrapper;
 
-	if (h->nr >= 0 && READ_ONCE(sys_call_table_ptr[h->nr]) != h->wrapper) {
+	/* Restore each table on its own.  Returning early because the native entry was
+	 * replaced (the old code did) would leave the compat entry pointing at a wrapper
+	 * in a module that is about to be freed - the same class of stale entry this
+	 * function exists to prevent. */
+	if (h->nr >= 0 && !native_ours)
 		pr_warn("susfs_fp: nr %d is not ours any more, leaving it alone\n", h->nr);
-		h->installed = false;
-		return;
-	}
+	if (cnr >= 0 && compat_sys_call_table_ptr && h->orig_compat && !compat_ours)
+		pr_warn("susfs_fp: %s: compat entry %d is not ours any more, leaving it alone\n",
+			h->name, cnr);
 
-	if (cnr >= 0 && compat_sys_call_table_ptr && h->orig_compat &&
-	    READ_ONCE(compat_sys_call_table_ptr[cnr]) == h->wrapper) {
+	if (compat_ours) {
 		err = ksu_patch_text(&compat_sys_call_table_ptr[cnr], &h->orig_compat,
 				     sizeof(h->orig_compat), KSU_PATCH_TEXT_FLUSH_DCACHE);
 		if (err)
 			pr_warn("susfs_fp: %s: compat entry %d restore failed %d\n",
 				h->name, cnr, err);
+		else if (READ_ONCE(compat_sys_call_table_ptr[cnr]) == h->wrapper)
+			pr_warn("susfs_fp: %s: compat entry %d still points at the wrapper after restore\n",
+				h->name, cnr);
 		else
 			pr_info("susfs_fp: %s: compat entry %d restored\n", h->name, cnr);
 	}
 
-	/* nr < 0 means there is no native entry: only the compat one above was ours. */
-	if (h->nr >= 0) {
+	if (native_ours) {
 		err = ksu_patch_text(&sys_call_table_ptr[h->nr], &h->orig,
 				     sizeof(h->orig), KSU_PATCH_TEXT_FLUSH_DCACHE);
 		if (err)
 			pr_warn("susfs_fp: nr %d restore failed %d\n", h->nr, err);
+		else if (READ_ONCE(sys_call_table_ptr[h->nr]) == h->wrapper)
+			pr_warn("susfs_fp: nr %d still points at the wrapper after restore\n", h->nr);
 		else
 			pr_info("susfs_fp: nr %d (%s) disarmed, entry %px restored\n",
 				h->nr, h->name, (void *)h->orig);

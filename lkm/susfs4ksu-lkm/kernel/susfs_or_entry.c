@@ -443,6 +443,11 @@ static __nocfi noinline long or_entry_redirect(const struct pt_regs *regs, int k
 	return fd;
 }
 
+susfs_or_entry_fn_t susfs_or_entry_expected_hook(void)
+{
+	return or_entry_redirect;
+}
+
 int susfs_or_entry_init(void)
 {
 	/* or_entry=0 means "no redirection at the name layer", and the rule-management path asks this
