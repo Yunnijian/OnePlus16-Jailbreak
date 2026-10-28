@@ -272,7 +272,7 @@ static bool susfs_cmd_handled(unsigned int cmd)
 
 static susfs_syscall_fn_t reboot_orig;
 
-static long reboot_wrapper(const struct pt_regs *regs)
+static long __nocfi reboot_wrapper(const struct pt_regs *regs)
 {
 	int magic1, magic2;
 	unsigned int cmd;

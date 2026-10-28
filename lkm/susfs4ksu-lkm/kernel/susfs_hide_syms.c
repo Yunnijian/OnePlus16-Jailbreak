@@ -676,7 +676,7 @@ static susfs_show_fn_t orig_m_show;
  * landing pad) untouched.  The original show runs first; a hidden line is discarded by rewinding
  * seq_file->count, which is exactly the "no output for this entry" the kprobe achieved by skipping
  * the body. */
-static int hide_syms_s_show_wrap(struct seq_file *m, void *p)
+static int __nocfi hide_syms_s_show_wrap(struct seq_file *m, void *p)
 {
 	struct kallsym_iter_local *iter;
 
@@ -711,7 +711,7 @@ static int hide_syms_s_show_wrap(struct seq_file *m, void *p)
 	return orig_s_show(m, p);
 }
 
-static int hide_syms_m_show_wrap(struct seq_file *m, void *p)
+static int __nocfi hide_syms_m_show_wrap(struct seq_file *m, void *p)
 {
 	struct module *mod;
 

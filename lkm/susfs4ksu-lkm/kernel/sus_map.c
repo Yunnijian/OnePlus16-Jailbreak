@@ -276,7 +276,7 @@ static int sus_map_skip_vma_pre(struct kprobe *kp, struct pt_regs *regs)
 /* seq_operations.show replacements for maps/smaps.  The originals are the functions
  * whose entry kprobes used to replace the BTI landing pad; calling them from a module
  * wrapper and rewinding seq_file->count keeps the landing pad intact. */
-static int sus_map_show_map_wrap(struct seq_file *m, void *v)
+static int __nocfi sus_map_show_map_wrap(struct seq_file *m, void *v)
 {
 	if (!m || !sus_map_orig_show)
 		return -EINVAL;
@@ -287,7 +287,7 @@ static int sus_map_show_map_wrap(struct seq_file *m, void *v)
 	return sus_map_orig_show(m, v);
 }
 
-static int sus_map_show_smap_wrap(struct seq_file *m, void *v)
+static int __nocfi sus_map_show_smap_wrap(struct seq_file *m, void *v)
 {
 	if (!m || !sus_map_orig_smap)
 		return -EINVAL;
