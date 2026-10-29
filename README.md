@@ -117,10 +117,6 @@ OnePlus16-Jailbreak/
 │   ├── src/prep_solve.c         设备端 slide 求解
 │   ├── src/prep_patch.c         ko 符号补丁（UNDEF → link+slide）
 │   └── build-98260.sh           用 NDK 静态编译 t98260_plant / t98260_su
-├── remote/                      设备端脚本与符号表副本（App 运行时不下载）
-│   ├── scripts/run.sh           64560 主流程
-│   ├── scripts/take_slide.sh    抓 slide
-│   └── syms-6.18.21.txt         该内核的符号表
 ├── lkm/                         LKM 构建脚本与 SUSFS 源码
 │   ├── build-kernelsu.sh        官方 KernelSU
 │   ├── build-next.sh            KernelSU Next
@@ -167,7 +163,7 @@ App 把全部设备端资产打包在 `app/app/src/main/assets/pyb110/`（约 48
 - 98260：`t98260_plant`、`t98260_su`、`prep_solve`、`prep_patch`、`forker`、`run98260.sh`；
 - 共用：`syms.txt`、`take_slide.sh`，以及所选管理器的 `ksu-base*.ko` + `ksud_*`。
 
-更新素材时直接替换 `assets/pyb110/` 下的文件并重新打包 APK。`remote/` 保留 64560 主流程、抓 slide 脚本与符号表副本，便于不装 App 时手工调试；与 `assets/pyb110/` 的对应文件需手动保持一致。
+更新素材时直接替换 `assets/pyb110/` 下的文件并重新打包 APK；不装 App 手工调试时也用同一目录下的脚本与符号表。
 
 ### LKM
 
