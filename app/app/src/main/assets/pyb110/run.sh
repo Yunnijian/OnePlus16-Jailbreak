@@ -16,6 +16,17 @@ MPKG=${PYB110_MANAGER_PKG:-$MPKG}
 echo "MANAGER=$MANAGER VERSION=${PYB110_MANAGER_VERSION:-unknown}"
 
 
+
+stop_riskdetect() {
+  if [ "$DISABLE_ANTIROOT" = "1" ]; then
+    su -c "stop riskdetect" 2>&1
+    echo "ANTIROOT_STOP_RC=$?"
+    echo "ANTIROOT_STATE=$(su -c 'getprop init.svc.riskdetect' 2>/dev/null | tr -d '\r')"
+  else
+    echo "ANTIROOT_SKIP: 开关关闭，未停止 riskdetect"
+  fi
+}
+
 unload_guard() {
   if [ "${PYB110_UNLOAD_GUARD:-0}" = "1" ]; then
     echo "UNLOAD_GUARD: rmmod oplus_secure_guard_new"
@@ -76,17 +87,7 @@ load_susfs() {
 if grep -qi kernelsu /proc/modules 2>/dev/null; then
   echo "ALREADY_LOADED: kernelsu present, skip exploit/load"
   cp -f "$KSUD" /data/local/tmp/ksud_official 2>/dev/null
-  if [ "$DISABLE_ANTIROOT" = "1" ]; then
-    su -c "pm disable-user --user 0 com.oplus.exsystemservice" 2>&1
-    echo "DISABLE_RC=$?"
-    su -c "pkill -9 -f com.oplus.exsystemservice" 2>&1
-    echo "KILL_RC=$?"
-    sleep 5
-    su -c "pm enable com.oplus.exsystemservice" 2>&1
-    echo "ANTIROOT_RESTORED: 已恢复 exsystemservice；如截图等系统功能异常，请软重启（重启 zygote/SystemUI）"
-  else
-    echo "ANTIROOT_SKIP: 开关关闭，未禁用安全组件"
-  fi
+  stop_riskdetect
   unload_guard
   su -c "/data/local/tmp/ksud_official install" 2>&1
   echo "KSUD_INSTALL_RC=$?"
@@ -157,23 +158,13 @@ if ! grep -qi kernelsu /proc/modules 2>/dev/null; then echo "LOAD_FAIL"; exit 15
 echo "MODULE_LOADED"
 
 echo "[6/6] anti-root guard + install ksud ($MANAGER)"
-if [ "$DISABLE_ANTIROOT" = "1" ]; then
-  su -c "pm disable-user --user 0 com.oplus.exsystemservice" 2>&1
-  echo "DISABLE_RC=$?"
-  su -c "pkill -9 -f com.oplus.exsystemservice" 2>&1
-  echo "KILL_RC=$?"
-  sleep 5
-  su -c "pm enable com.oplus.exsystemservice" 2>&1
-  echo "ANTIROOT_RESTORED: 已恢复 exsystemservice；如截图等系统功能异常，请软重启（重启 zygote/SystemUI）"
-else
-  echo "ANTIROOT_SKIP: 开关关闭，未禁用安全组件"
-fi
+stop_riskdetect
 unload_guard
 su -c "/data/local/tmp/ksud_official install" 2>&1
 echo "KSUD_INSTALL_RC=$?"
 install_manager_apk
 sleep 10
-su -c "id; getenforce; grep -i kernelsu /proc/modules; /data/adb/ksud debug version; pm list packages -d | grep exsystemservice" 2>&1
+su -c "id; getenforce; grep -i kernelsu /proc/modules; /data/adb/ksud debug version; getprop init.svc.riskdetect" 2>&1
 echo "SU_ID_RC=$?"
 sleep 3
 echo "CROWN"

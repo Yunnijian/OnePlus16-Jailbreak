@@ -75,22 +75,20 @@ load_susfs() {
 
 start_antiroot_guard() {
   if [ "$DISABLE_ANTIROOT" != "1" ]; then
-    echo "ANTIROOT_SKIP: 开关关闭，未禁用安全组件"
+    echo "ANTIROOT_SKIP: 开关关闭，未停止 riskdetect"
     return 0
   fi
   setsid sh -c "
     n=0
     while [ \$n -lt 100 ]; do
-      su -c 'pm disable-user --user 0 com.oplus.exsystemservice' >/dev/null 2>&1 && break
+      su -c 'stop riskdetect' >/dev/null 2>&1 && break
       sleep 0.1
       n=\$((n+1))
     done
-    su -c 'am force-stop com.oplus.exsystemservice' >/dev/null 2>&1
-    sleep 5
-    su -c 'pm enable com.oplus.exsystemservice' >/dev/null 2>&1
-    echo ANTIROOT_RESTORED >> '$D/antiroot.log'
+    st=\$(su -c 'getprop init.svc.riskdetect' 2>/dev/null | tr -d '\r')
+    echo \"ANTIROOT_STOPPED state=\$st\" >> '$D/antiroot.log'
   " >/dev/null 2>&1 &
-  echo "ANTIROOT_GUARD_BG: 已启动（su 可用后立即禁用，5 秒后恢复）"
+  echo "ANTIROOT_GUARD_BG: 已停止 riskdetect HAL（不自动恢复，重启后恢复）"
 }
 
 wait_kernelsu() {
@@ -129,7 +127,17 @@ finish_manager() {
   fi
   load_susfs
   am force-stop "$MPKG" 2>/dev/null
-  monkey -p "$MPKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  ACT=$(cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$MPKG" 2>/dev/null | tail -n 1)
+  case "$ACT" in
+    */*)
+      am start -n "$ACT" 2>&1
+      echo "MANAGER_START=$ACT"
+      ;;
+    *)
+      echo "MANAGER_START_FALLBACK=monkey"
+      monkey -p "$MPKG" -c android.intent.category.LAUNCHER 1 2>&1
+      ;;
+  esac
 }
 
 if grep -qi kernelsu /proc/modules 2>/dev/null; then
@@ -151,26 +159,37 @@ if [ $rc -ne 0 ]; then
 fi
 
 echo "[2/4] run t98260_plant (auto slide)"
-kill -9 $(pidof t98260_plant) 2>/dev/null
+if pidof t98260_plant >/dev/null 2>&1; then
+  echo "STALE_PLANT: $(pidof t98260_plant)；请先重启设备再跑 98260（避免释放持页进程）"
+  exit 12
+fi
 rm -f plant.log t98260-root.sock
-setsid ./t98260_plant --auto --budget 240 > plant.log 2>&1 &
-BP=$!
-echo "PLANT_PID=$BP (命中后 SELinux 变 Permissive)"
+setsid sh -c "./t98260_plant --auto --budget 240 2>&1 | tee plant.log" &
+sleep 0.1
+echo "PLANT_PID=$(pidof t98260_plant) (命中后 SELinux 变 Permissive)"
 ROOTED=0
 i=0
 while [ $i -lt 1100 ]; do
   if grep -q "ROOTD_READY" plant.log 2>/dev/null; then ROOTED=1; break; fi
   if grep -qE "FAIL=(task|selinux|cred|init|probe)" plant.log 2>/dev/null; then break; fi
   if grep -q "PARKED=1" plant.log 2>/dev/null; then break; fi
-  kill -0 $BP 2>/dev/null || break
-  if [ $((i % 20)) -eq 0 ]; then
-    tail -n 2 plant.log 2>/dev/null | sed 's/^/  | /'
+  if ! pidof t98260_plant >/dev/null 2>&1; then
+    grep -q "ROOTD_READY" plant.log 2>/dev/null && ROOTED=1
+    break
   fi
   sleep 0.3
   i=$((i+1))
 done
-if [ "$ROOTED" != "1" ] || [ "$(getenforce 2>/dev/null)" != "Permissive" ]; then
+if [ "$ROOTED" != "1" ] && grep -q "ROOTD_READY" plant.log 2>/dev/null; then
+  ROOTED=1
+fi
+if [ "$ROOTED" != "1" ]; then
   echo "PLANT_FAIL (enforce=$(getenforce 2>/dev/null))"
+  tail -n 15 plant.log 2>/dev/null
+  exit 13
+fi
+if [ "$(getenforce 2>/dev/null)" != "Permissive" ]; then
+  echo "PLANT_FAIL_ENFORCE: $(getenforce 2>/dev/null)"
   tail -n 15 plant.log 2>/dev/null
   exit 13
 fi

@@ -1,5 +1,6 @@
 package com.pyb110.onekey
 
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -507,7 +508,7 @@ class MainActivity : ComponentActivity() {
     private fun updateAntiRootGuard(value: Boolean) {
         antiRootGuard = value
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("antiroot_guard", value).apply()
-        addLog("安全弹窗守卫: ${if (value) "开启（禁用 5 秒后自动恢复）" else "关闭"}")
+        addLog("安全弹窗守卫: ${if (value) "开启（停止 riskdetect HAL，重启后恢复）" else "关闭"}")
     }
 
     private fun updateSoftRebootAfter(value: Boolean) {
@@ -610,6 +611,17 @@ class MainActivity : ComponentActivity() {
         "TMPDIR=/data/local/tmp"
     )
 
+    private fun launchManager() {
+        val intent = packageManager.getLaunchIntentForPackage(manager.pkg)
+        if (intent == null) {
+            addLog("未找到管理器的启动入口: ${manager.pkg}")
+            return
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        runCatching { startActivity(intent) }
+            .onFailure { addLog("打开管理器失败: $it") }
+    }
+
     private fun runFlow() {
         busy = true
         val softReboot = softRebootAfter
@@ -637,6 +649,9 @@ class MainActivity : ComponentActivity() {
                     selinuxText = se
                 }
                 addLog(if (active) "KernelSU 模块已加载" else "KernelSU 模块未加载")
+                if (active && !softReboot) {
+                    withContext(Dispatchers.Main) { launchManager() }
+                }
                 if (softReboot && rc == 0 && active) {
                     addLog("越狱完成，执行软重启（重启 zygote）")
                     val rebootRc = runCatching {

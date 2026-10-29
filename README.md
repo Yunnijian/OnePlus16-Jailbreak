@@ -13,7 +13,7 @@
 - **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器对齐上游 `35252`（`v4.2.0-rc3`），真机加载成功；LKM 435,616 B。
 - **KernelSU Next**：LKM 350,000 B，已按同版本 GKI 编译并在 App 中可选，尚未做实机加载验证。
 - **SukiSU Ultra**：LKM/ksud 对齐 HEAD `080ba098`（版本 41097，`v4.2.1-r2-080ba098@main`），LKM 544,848 B、ksud 7,857,184 B；41068 真机加载成功，41097 为同 uapi 更新。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.14 已构建。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.18 已构建。
 - **全内置**：四个管理器的 ko/ksud、符号表、slide、越狱脚本与 SUSFS guard LKM 全部打包在 APK 内（`assets/pyb110` 约 51 MB，release APK 约 30 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
@@ -49,13 +49,13 @@
 │   3 selinux_state-7 零写 → Permissive         │
 │   4 perf 泄漏 cred + 两阶段写                 │
 │   5 finit_module 加载 LKM                     │
-│   6 反 root 守卫 + ksud 安装                  │
+│   6 停 riskdetect + ksud 安装                 │
 │  98260：run98260.sh                           │
 │   1 probe（内核指纹 / trace 通道）            │
 │   2 t98260_plant --auto：UAF / 自推 slide →   │
 │     假 cred → rootd                           │
 │   3 t98260_su → ksud late-load（回退 insmod） │
-│   4 反 root 后台守卫 + ksud 安装              │
+│   4 停 riskdetect + ksud 安装                 │
 └───────────────┬───────────────────────────────┘
                 ▼
 ┌────────────────────────────────┐
@@ -86,11 +86,12 @@
 - **slide 自推**：从 2048 条 `do_timer_create+0xb8` 的 `kmem_cache_alloc` 记录取众数 call_site，直接得到 KASLR slide，快路径不再单独跑 `take_slide.sh` + `prep_solve`。
 - **回收**：4096 个 socketpair 各持一个 8K skb（约 32 MB）抢 order-1 页；`mm_page_free` 10 ms 轮询；每次触发器用完立即关闭 `rss_stat`，避免 rss 记录洪水把回收扫描拖到 20 秒级。
 - **cred**：`rb_node.parent_color = node 自身`（`RB_EMPTY_NODE`，保证 cleanup 只摘链一次），指针写把 `task->cred` 指向页内假 cred；`rb_erase` 的第二次写落在 `node+0x08`（uid/gid），用一次 tile 零写补齐；假 cred 子进程内 fork+exec 自检 `Uid=0` 且 `CapEff=0x1ffffffffff` 通过后才起 rootd。
-- **实测（2026-10-29，PYB110 干净 boot）**：`t98260_plant --auto` 到 `ROOTD_READY` **1.75 s**（SELinux 1 次命中 492 ms、cred 585 ms、+8 补写 560 ms）；`run98260.sh` 全流程（probe → plant → late-load → ksud install → 管理器）**3.16 s**。
+- **管理器拉起**：SukiSU 的 Launcher Activity 是混淆名，`am start -p` 解析不到、`monkey -p` 只起进程不保证置前；脚本改为 `cmd package resolve-activity` 取组件后 `am start -n`，App 在脚本结束且模块已加载时再用 `getLaunchIntentForPackage` 从前景兜底拉起。
+- **实测（2026-10-29，PYB110 干净 boot）**：`t98260_plant --auto` 到 `ROOTD_READY` **1.75 s**（SELinux 1 次命中 492 ms、cred 585 ms、+8 补写 560 ms）；`run98260.sh` 全流程（probe → plant → late-load → ksud install → 管理器）**3.16 s**。用户 App 内实跑（SukiSU，v1.15）全流程 **<5 s**（用户口径，2026-10-29）；v1.16 把 plant 日志改为 `tee` 实时流式；v1.17 修复管理器自动拉起；v1.18 反 root 改为停 `riskdetect` HAL（不 disable/kill exsystemservice）。
 
 **两个分支共用**
 
-- **反 root 守卫**：ColorOS 的 `com.oplus.exsystemservice` 会在检测到提权后弹窗并在 15 秒后 `reboot("Malicious app try to root devices")`。可选开关开启时，late-load 后立即启动后台守卫，轮询到 KSU su 可用就 `pm disable-user` + `am force-stop`，**5 秒后自动 `pm enable`**（禁用过久会导致系统截图不可用）。
+- **反 root 守卫**：ColorOS 的 `com.oplus.exsystemservice` 会在检测到提权后弹窗并在 15 秒后 `reboot("Malicious app try to root devices")`。可选开关开启时，late-load 后后台轮询到 KSU su 可用就 `stop riskdetect`（上游 AIDL HAL `vendor.oplus.hardware.riskdetect.IRiskDetect/default`），**不自动恢复，重启后恢复**；不再 disable/kill exsystemservice，因此不会拆掉同 host 里的 `OplusScreenshotManagerService`，截图链路不受影响。
 
 ## 目录结构
 
@@ -213,7 +214,7 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 2. 在「ROOT管理器」下拉选择 KernelSU / KernelSU Next / BakaSU / SukiSU Ultra，在「漏洞利用方式」下拉选择 CVE-2026-64560 或 CVE-2026-98260。切换管理器后需重启再越狱（已加载模块不能热替换）。
 3. 98260 建议在干净开机后执行：`t98260_plant --probe` 会先核对内核 release 与 trace 通道；plant 通常 2 秒内到 rootd（SELinux 首次命中受 spray 影响，预算 240 秒）。
 4. 四个流程开关：
-   - 「越狱后禁用安全弹窗」：拿到 su 后禁用 `com.oplus.exsystemservice` 并 kill 进程，5 秒后自动恢复；如截图等系统功能异常，软重启（重启 zygote/SystemUI）。
+   - 「越狱后禁用安全弹窗」：拿到 su 后停止 `riskdetect` HAL（`stop riskdetect`），不自动恢复、重启后恢复；不触碰 `com.oplus.exsystemservice`/截图服务。
    - 「越狱后软重启」：流程跑完且模块确认加载后，以 `su` 执行 `setprop ctl.restart zygote`；失败不会影响已完成的越狱。
    - 「越狱后卸载内核安全防护」：拿到 su 后 `rmmod oplus_secure_guard_new`，日志给出 `UNLOAD_GUARD_GONE` 或 `UNLOAD_GUARD_STILL_LOADED`；模块被引用时不会强制卸载，重启后会重新加载。
    - 「SUSFS 支持」：开启后越狱成功时自动把内置的 `susfs_guard_lkm.ko` 部署到设备，并以 `ksud insmod`（回退 `insmod`）加载；日志给出 `SUSFS_LOADED` / `SUSFS_LOAD_FAIL`，加载失败不影响已完成的越狱。默认关闭，关闭时该 ko 不会随流程部署。
@@ -253,6 +254,6 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 
 ## 校验和
 
-- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 30,792,630 B / md5 `f5f92498e56af96862cc1232348a7341` / sha256 `c40a0f78fade497fc7e67d64ccbb5ce4182154360ba8bfda1dcd2bf1ea776f58`（本地构建产物，不入库）。
+- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 30,792,630 B / md5 `3758c7c6b6344854c6aeb20806926717` / sha256 `d62a21f46e28d948675a531ed708f275c3725692cb2b6fcfb0ecfb87e23911b9`（本地构建产物，不入库）。
 - KernelSU LKM（6.18.21）：349,224 B；Next：350,000 B；BakaSU：435,616 B；SukiSU：544,848 B（strip 后）。
 - SUSFS guard LKM（6.18.21，内置 assets）：3,456,440 B / sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`（未 strip）。
