@@ -681,6 +681,7 @@ class MainActivity : ComponentActivity() {
         }
         val (ko, ksud) = when (manager) {
             ManagerKind.KERNELSU -> "ksu-base.ko" to "ksud_official"
+            ManagerKind.FINASU -> "ksu-base-finasu.ko" to "ksud_finasu"
             ManagerKind.NEXT -> "ksu-base-next.ko" to "ksud_next"
             ManagerKind.BAKASU -> "ksu-base-bakasu.ko" to "ksud_bakasu"
             ManagerKind.SUKISU -> "ksu-base-sukisu.ko" to "ksud_sukisu"
@@ -797,6 +798,7 @@ class MainActivity : ComponentActivity() {
 
     private enum class ManagerKind(val fullLabel: String, val pkg: String, val manager: String) {
         KERNELSU("KernelSU", "me.weishu.kernelsu", "kernelsu"),
+        FINASU("FinaSU", "me.yuki.fina", "finasu"),
         NEXT("KernelSU Next", "com.rifsxd.ksunext", "next"),
         BAKASU("BakaSU", "com.resukisu.resukisu", "bakasu"),
         SUKISU("SukiSU Ultra", "com.sukisu.ultra", "sukisu")

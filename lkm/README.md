@@ -8,7 +8,7 @@
 - KDIR：`gki_defconfig` + `modules_prepare` + `security/selinux/built-in.a`
 - DDK：`ghcr.io/ylarod/ddk-min:android17-6.18-20260828`（clang r584948c）
 
-五个脚本都假定在 DDK 容器内、KMI 源与 KDIR 已挂载：
+六个脚本都假定在 DDK 容器内、KMI 源与 KDIR 已挂载：
 
 ```bash
 docker run --rm \
@@ -16,6 +16,7 @@ docker run --rm \
   -v <kdir>:/work/kdir \
   -v <kernelsu-source>:/work/ksun \
   -v <bakasu-source>:/work/resukisu \
+  -v <finasu-source>:/work/finasu \
   -v <repo>/lkm/susfs4ksu-lkm:/work/susfs4ksu-lkm \
   -v <out>:/out \
   ghcr.io/ylarod/ddk-min:android17-6.18-20260828 \
@@ -27,9 +28,10 @@ docker run --rm \
 | 脚本 | 产物 | strip 后 |
 | --- | --- | --- |
 | `build-kernelsu.sh` | 官方 KernelSU main `db6263d3`（UAPI6，32707） | 382,232 B |
-| `build-next.sh` | KernelSU Next | 350,000 B |
+| `build-next.sh` | KernelSU Next dev `da0b3f37`（33442） | 489,264 B |
 | `build-bakasu.sh` | BakaSU 35252（v4.2.0-rc3） | 435,616 B |
-| `build-sukisu.sh` | SukiSU Ultra 41097（HEAD 080ba098） | 544,848 B |
+| `build-sukisu.sh` | SukiSU Ultra v4.3.0 `e67b14e6`（41100） | 545,040 B |
+| `build-finasu.sh` | FinaSU master `9b32bde4`（v1.3.2 / 33090） | 496,744 B |
 | `build-susfs.sh` | SUSFS guard LKM（vendored） | 3,456,440 B（未 strip） |
 
 vermagic 均为 `6.18.21-4k SMP preempt mod_unload modversions aarch64`。

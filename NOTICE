@@ -53,3 +53,8 @@ Third-party components
          lkm/susfs4ksu-lkm/MODIFICATIONS.md.
 
 The application icon is drawn by this project.
+
+10. FinaSU
+   Source: https://github.com/LyraVoid/FinaSU
+   License: GPL-2.0
+   Used: LKM source at build time; ksud / manager are upstream release artifacts.

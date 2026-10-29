@@ -5,6 +5,7 @@
 
     <queries>
         <package android:name="me.weishu.kernelsu" />
+        <package android:name="me.yuki.fina" />
         <package android:name="com.rifsxd.ksunext" />
         <package android:name="com.resukisu.resukisu" />
         <package android:name="com.sukisu.ultra" />

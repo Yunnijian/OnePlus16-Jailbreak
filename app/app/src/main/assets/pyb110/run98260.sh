@@ -9,6 +9,7 @@ DISABLE_ANTIROOT=${PYB110_DISABLE_ANTIROOT:-1}
 LATE_OK=0
 UNLOAD_GUARD=${PYB110_UNLOAD_GUARD:-0}
 case "$MANAGER" in
+  finasu) BASE=ksu-base-finasu.ko; KSUD=ksud_finasu; MPKG=me.yuki.fina ;;
   next) BASE=ksu-base-next.ko; KSUD=ksud_next; MPKG=com.rifsxd.ksunext ;;
   bakasu) BASE=ksu-base-bakasu.ko; KSUD=ksud_bakasu; MPKG=com.resukisu.resukisu ;;
   sukisu) BASE=ksu-base-sukisu.ko; KSUD=ksud_sukisu; MPKG=com.sukisu.ultra ;;
@@ -16,6 +17,42 @@ case "$MANAGER" in
 esac
 MPKG=${PYB110_MANAGER_PKG:-$MPKG}
 echo "EXPLOIT=98260 ENGINE=t98260 MANAGER=$MANAGER"
+
+restore_screenshot_stack() {
+  echo "SCREENSHOT_STACK: checking ColorOS screenshot components"
+  if ! su -c true >/dev/null 2>&1; then
+    echo "SCREENSHOT_STACK_SKIP=no-su"
+    return 0
+  fi
+  DIS=$(su -c "pm list packages -d --user 0 2>/dev/null" 2>/dev/null | tr -d '\r')
+  for p in com.oplus.exsystemservice com.oplus.screenshot; do
+    if ! su -c "pm list packages '$p'" 2>/dev/null | grep -qx "package:$p"; then
+      echo "SCREENSHOT_STACK_ABSENT=$p"
+      continue
+    fi
+    if printf '%s\n' "$DIS" | grep -qx "package:$p"; then
+      su -c "pm enable --user 0 '$p'" 2>&1
+      echo "SCREENSHOT_STACK_ENABLED=$p rc=$?"
+    else
+      echo "SCREENSHOT_STACK_OK=$p"
+    fi
+  done
+}
+
+crown_dynamic_manager() {
+  if [ "$MANAGER" != "finasu" ]; then
+    return 0
+  fi
+  APKP=$(pm path me.yuki.fina 2>/dev/null | sed -n 's/^package://p' | head -n 1)
+  if [ -z "$APKP" ]; then
+    echo "DYNAMIC_MANAGER_NO_APK"
+    return 0
+  fi
+  su -c "/data/adb/ksud dynamic set-apk '$APKP'" 2>&1
+  echo "DYNAMIC_SET_APK_RC=$?"
+  su -c "/data/adb/ksud dynamic list" 2>&1
+  echo "DYNAMIC_LIST_RC=$?"
+}
 
 unload_guard() {
   if [ "$UNLOAD_GUARD" = "1" ]; then
@@ -118,6 +155,8 @@ finish_manager() {
   su -c "/data/local/tmp/ksud_official install" 2>&1
   echo "KSUD_INSTALL_RC=$?"
   install_manager_apk
+  crown_dynamic_manager
+  restore_screenshot_stack
   su -c "id; getenforce; grep -i kernelsu /proc/modules" 2>&1
   echo "SU_ID_RC=$?"
   if [ "$(su -c 'id -u' 2>/dev/null | tr -d '\r')" = "0" ]; then

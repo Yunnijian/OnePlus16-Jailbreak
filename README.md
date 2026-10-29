@@ -2,7 +2,7 @@
 
 OnePlus 16（PYB110）一键越狱工具。
 
-在 **OnePlus 16（PYB110，SM8950，Android 17 / ColorOS，内核 `6.18.21-android17-5-gf957accaf563-ab15926176-4k`）** 上，通过 **CVE-2026-64560** 或 **CVE-2026-98260** 提权，并加载 **内核态 root（KernelSU / KernelSU Next / BakaSU / SukiSU Ultra）** 的一键工具与源码。
+在 **OnePlus 16（PYB110，SM8950，Android 17 / ColorOS，内核 `6.18.21-android17-5-gf957accaf563-ab15926176-4k`）** 上，通过 **CVE-2026-64560** 或 **CVE-2026-98260** 提权，并加载 **内核态 root（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）** 的一键工具与源码。
 
 设备未解锁 BL，起手只有 adb shell（uid 2000）。工具通过 Shizuku 以 shell 身份驱动设备端 exploit，最终加载按本机 GKI 6.18.21 自编的 LKM：64560 分支走 `finit_module`，98260 分支走 `ksud late-load`（失败回退 `insmod`）。
 
@@ -13,10 +13,11 @@ OnePlus 16（PYB110）一键越狱工具。
 - **双漏洞可选**：默认 `CVE-2026-64560`（逐字段零写 cred + `finit_module`）；`CVE-2026-98260` 使用本仓库的 `t98260_plant` 引擎（exec + POSIX 定时器 UAF、假 cred 指针写 + rootd），真机验证 uid 0、全量 CapEff、SELinux Permissive。98260 建议在干净开机后使用。
 - **KernelSU（官方 main，UAPI6）**：LKM 按 `main` `db6263d3`（`v3.3.1-27-gdb6263d3`，versionCode 32707）用本机 6.18.21 GKI 重编，382,232 B、229 个 UNDEF 全部能由 `syms.txt` 解析，真机验证通过；ksud 同版本（6,618,008 B，uapi 6）。管理器需用同版本的 `KernelSU_v3.3.1-27-gdb6263d3_32707-release.apk`（与旧版 32680 同签名，`adb install -r` 直接覆盖）；旧管理器的 supercall 仍可用，但没有 UAPI6 的模块 preinit 等新特性。注意 UAPI6 的 ksud 必须配 UAPI6 LKM（ksud 启动会校验），不能与旧 5 版 LKM 混用。
 - **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器对齐上游 `35252`（`v4.2.0-rc3`），LKM 435,616 B；真机验证通过（35252-6）。
+- **FinaSU（v1.3.2 最新）**：按 `master` `9b32bde4` 重编 LKM 496,744 B（UNDEF 232 全命中）、ksud 7,561,328 B（uapi 6），管理器 v1.3.2（33090）；使用 `KSU_DYNAMIC_MANAGER` 动态签名（`ksud dynamic set-apk`）。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；已内置并在 App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.28 已构建（31,822,666 B，md5 `f051b62132eb89374a63e16ca9e4b643`）。
-- **全内置**：四个管理器的 ko/ksud、符号表、slide、越狱脚本与 SUSFS guard LKM 全部打包在 APK 内（`assets/pyb110` 约 53 MB，release APK 约 31 MB），运行时不联网；管理器 APK 由用户自行安装。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.30 已构建（37,641,107 B，md5 `c3a00262f594a12aeebd220a69b554a0`）。
+- **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本与 SUSFS guard LKM 全部打包在 APK 内（`assets/pyb110` 约 61 MB，release APK 约 38 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
 
@@ -101,6 +102,7 @@ OnePlus 16（PYB110）一键越狱工具。
 
 **两个分支共用**
 
+- **截图链路恢复**：两条分支在 `ksud install` 后检查 `com.oplus.exsystemservice` 与 `com.oplus.screenshot`，发现被禁用（旧版逻辑或手动误禁）就 `pm enable --user 0` 恢复，日志 `SCREENSHOT_STACK_OK/ENABLED/ABSENT/SKIP`；已启用时只做检查，不影响截图与反 root 守卫。
 - **反 root 守卫**：ColorOS 的 `com.oplus.exsystemservice` 会在检测到提权后弹窗并在 15 秒后 `reboot("Malicious app try to root devices")`。可选开关开启时，64560 在 `[6/6]`、98260 在 `PLANT_OK` 后立刻后台启动守卫；守卫轮询到 KSU su 可用就 `stop riskdetect`（上游 AIDL HAL `vendor.oplus.hardware.riskdetect.IRiskDetect/default`），**不自动恢复，重启后恢复**；不再 disable/kill exsystemservice，因此不会拆掉同 host 里的 `OplusScreenshotManagerService`，截图链路不受影响。
 
 ## 目录结构
@@ -110,7 +112,7 @@ OnePlus16-Jailbreak/
 ├── app/                         Android App（Gradle 工程根）
 │   ├── app/                     :app 模块（Kotlin/Compose/Miuix/Shizuku）
 │   │   ├── src/main/java/com/pyb110/onekey/MainActivity.kt  单页设置与流程调度
-│   │   ├── src/main/assets/pyb110/  内置设备端工具与四家 ko/ksud（约 48 MB）
+│   │   ├── src/main/assets/pyb110/  内置设备端工具与五家 ko/ksud（约 61 MB）
 │   │   ├── src/main/res/        自绘图标与资源
 │   │   ├── build.gradle.kts     签名配置 + R8
 │   │   └── proguard-rules.pro
@@ -128,6 +130,7 @@ OnePlus16-Jailbreak/
 │   ├── build-kernelsu.sh        官方 KernelSU
 │   ├── build-next.sh            KernelSU Next
 │   ├── build-bakasu.sh          BakaSU（原 ReSukiSU）
+│   ├── build-finasu.sh          FinaSU
 │   ├── build-sukisu.sh          SukiSU Ultra
 │   ├── build-susfs.sh           SUSFS guard LKM
 │   ├── susfs4ksu-lkm/           SUSFS LKM 源码（上游 28b2e85，GPL-2.0）
@@ -185,6 +188,9 @@ bash lkm/build-kernelsu.sh        # 在容器内运行
 # KernelSU Next
 bash lkm/build-next.sh
 
+# FinaSU
+bash lkm/build-finasu.sh
+
 # BakaSU（原 ReSukiSU，需 tracepoint hook + 多管理器）
 bash lkm/build-bakasu.sh
 
@@ -217,7 +223,7 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 ## 使用
 
 1. 用无线调试启动 Shizuku，并授权本 App。
-2. 在「ROOT管理器」下拉选择 KernelSU / KernelSU Next / BakaSU / SukiSU Ultra，在「漏洞利用方式」下拉选择 CVE-2026-64560 或 CVE-2026-98260。切换管理器后需重启再越狱（已加载模块不能热替换）。
+2. 在「ROOT管理器」下拉选择 KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra，在「漏洞利用方式」下拉选择 CVE-2026-64560 或 CVE-2026-98260。切换管理器后需重启再越狱（已加载模块不能热替换）。
 3. 98260 建议在干净开机后执行：`t98260_plant --probe` 会先核对内核 release 与 trace 通道；plant 通常 2 秒内到 rootd（SELinux 首次命中受 spray 影响，预算 240 秒）。
 4. 四个流程开关：
    - 「越狱后禁用安全弹窗」：拿到 su 后停止 `riskdetect` HAL（`stop riskdetect`），不自动恢复、重启后恢复；不触碰 `com.oplus.exsystemservice`/截图服务。
@@ -252,6 +258,7 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
   [AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak](https://github.com/AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak)（MIT，许可全文见 `third_party/cve-2026-98260-LICENSES/AzirX1337-MIT.txt`）。
 - 官方 KernelSU：[tiann/KernelSU](https://github.com/tiann/KernelSU)（GPL-2.0）。
 - KernelSU Next：[rifsxd/KernelSU-Next](https://github.com/rifsxd/KernelSU-Next)（GPL-2.0）。
+- FinaSU：[LyraVoid/FinaSU](https://github.com/LyraVoid/FinaSU)（GPL-2.0）。
 - BakaSU（原 ReSukiSU）：[Baka-SU/BakaSU](https://github.com/Baka-SU/BakaSU)（GPL-2.0）。
 - SukiSU Ultra：[SukiSU-Ultra/SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)（GPL-3.0）。
 - SUSFS guard LKM：[inforcqb/susfs4ksu-lkm](https://github.com/inforcqb/susfs4ksu-lkm)（GPL-2.0；源码 vendored 在 `lkm/susfs4ksu-lkm`，BTI 兼容修改见 `MODIFICATIONS.md`）。
@@ -261,5 +268,5 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 ## 校验和
 
 - release APK：`app/app/build/outputs/apk/release/app-release.apk` / 30,792,382 B / md5 `77aff6105fce3b5f9e1296132be406ac` / sha256 `f510ebde38778bd614c163a58eb13bb3509a3b39cecd12b3a13a10dd3e752b72`（本地构建产物，不入库）。
-- KernelSU LKM（6.18.21）：349,224 B；Next：350,000 B；BakaSU：435,616 B；SukiSU：544,848 B（strip 后）。
+- KernelSU LKM（6.18.21）：382,232 B；Next：489,264 B；BakaSU：435,616 B；SukiSU：545,040 B；FinaSU：496,744 B（strip 后）。
 - SUSFS guard LKM（6.18.21，内置 assets）：3,456,440 B / sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`（未 strip）。
