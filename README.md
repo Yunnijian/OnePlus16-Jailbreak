@@ -52,19 +52,26 @@ OnePlus 16（PYB110）一键越狱工具。
 │   3 selinux_state-7 零写 → Permissive         │
 │   4 perf 泄漏 cred + 两阶段写                 │
 │   5 finit_module 加载 LKM                     │
-│   6 停 riskdetect + ksud 安装                 │
+│   6 停 riskdetect + ksud 安装 + 加冕          │
+│   7 可选 SUSFS → 拉起管理器                   │
 │  98260：run98260.sh                           │
 │   1 probe（内核指纹 / trace 通道）            │
 │   2 t98260_plant --auto：UAF / 自推 slide →   │
 │     假 cred → rootd                           │
-│   3 t98260_su → ksud late-load（回退 insmod） │
-│   4 停 riskdetect + ksud 安装                 │
+│   3 PLANT_OK → 后台守卫等 su 就绪停           │
+│     riskdetect；t98260_su → ksud late-load    │
+│     （失败 → prep_patch + insmod）            │
+│   4 等 KSU/su → ksud install / 清 rootd       │
+│   5 可选 SUSFS → 拉起管理器（late-load 已     │
+│     拉起则跳过）                              │
 └───────────────┬───────────────────────────────┘
                 ▼
 ┌────────────────────────────────┐
 │ 内核：ksu-base*.ko (LKM)       │
 │  - su / 管理器加冕             │
-│  - 模块参数 allow_shell=1      │
+│  - allow_shell=1（98260 的     │
+│    late-load 传 --allow-shell）│
+│  - 可选 susfs_guard_lkm.ko     │
 └────────────────────────────────┘
 ```
 
@@ -94,7 +101,7 @@ OnePlus 16（PYB110）一键越狱工具。
 
 **两个分支共用**
 
-- **反 root 守卫**：ColorOS 的 `com.oplus.exsystemservice` 会在检测到提权后弹窗并在 15 秒后 `reboot("Malicious app try to root devices")`。可选开关开启时，late-load 后后台轮询到 KSU su 可用就 `stop riskdetect`（上游 AIDL HAL `vendor.oplus.hardware.riskdetect.IRiskDetect/default`），**不自动恢复，重启后恢复**；不再 disable/kill exsystemservice，因此不会拆掉同 host 里的 `OplusScreenshotManagerService`，截图链路不受影响。
+- **反 root 守卫**：ColorOS 的 `com.oplus.exsystemservice` 会在检测到提权后弹窗并在 15 秒后 `reboot("Malicious app try to root devices")`。可选开关开启时，64560 在 `[6/6]`、98260 在 `PLANT_OK` 后立刻后台启动守卫；守卫轮询到 KSU su 可用就 `stop riskdetect`（上游 AIDL HAL `vendor.oplus.hardware.riskdetect.IRiskDetect/default`），**不自动恢复，重启后恢复**；不再 disable/kill exsystemservice，因此不会拆掉同 host 里的 `OplusScreenshotManagerService`，截图链路不受影响。
 
 ## 目录结构
 
