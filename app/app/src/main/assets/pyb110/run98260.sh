@@ -6,6 +6,7 @@ chmod 755 t98260_plant t98260_su prep_patch ksu* ksud* 2>/dev/null
 
 MANAGER=${PYB110_MANAGER:-kernelsu}
 DISABLE_ANTIROOT=${PYB110_DISABLE_ANTIROOT:-1}
+LATE_OK=0
 UNLOAD_GUARD=${PYB110_UNLOAD_GUARD:-0}
 case "$MANAGER" in
   next) BASE=ksu-base-next.ko; KSUD=ksud_next; MPKG=com.rifsxd.ksunext ;;
@@ -126,6 +127,20 @@ finish_manager() {
     echo "ROOTD_KEPT: su unavailable; keeping rootd as fallback"
   fi
   load_susfs
+  # ksud late-load already restarts the manager; a second force-stop/start
+  # would flash its splash twice.
+  if [ "$LATE_OK" = "1" ]; then
+    n=0
+    while [ $n -lt 15 ]; do
+      pidof "$MPKG" >/dev/null 2>&1 && break
+      sleep 0.1
+      n=$((n+1))
+    done
+    if pidof "$MPKG" >/dev/null 2>&1; then
+      echo "MANAGER_START=late-load"
+      return 0
+    fi
+  fi
   am force-stop "$MPKG" 2>/dev/null
   ACT=$(cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$MPKG" 2>/dev/null | tail -n 1)
   case "$ACT" in
@@ -198,11 +213,13 @@ echo "PLANT_OK: enforce=Permissive, rootd ready"
 echo "[3/4] handoff to $MANAGER"
 start_antiroot_guard
 ./t98260_su -c "$D/$KSUD late-load --kmi android17-6.18 --allow-shell --package-name $MPKG" 2>&1
-if ! wait_kernelsu; then
+wait_kernelsu && LATE_OK=1
+if [ "$LATE_OK" != "1" ]; then
   echo "LATE_LOAD_RETRY: without --kmi"
   ./t98260_su -c "$D/$KSUD late-load --allow-shell --package-name $MPKG" 2>&1
+  wait_kernelsu && LATE_OK=1
 fi
-if ! wait_kernelsu; then
+if [ "$LATE_OK" != "1" ]; then
   echo "LATE_LOAD_FAIL: fallback to insmod ($BASE)"
   SLIDE=$(sed -n 's/.*SLIDE_DERIVED=0x\([0-9a-f]*\).*/0x\1/p' plant.log 2>/dev/null | tail -n 1)
   if [ -z "$SLIDE" ]; then
