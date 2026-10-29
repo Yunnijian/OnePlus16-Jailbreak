@@ -26,7 +26,7 @@ docker run --rm \
 
 | 脚本 | 产物 | strip 后 |
 | --- | --- | --- |
-| `build-kernelsu.sh` | 官方 KernelSU v3.3.1 | 349,224 B |
+| `build-kernelsu.sh` | 官方 KernelSU main `db6263d3`（UAPI6，32707） | 382,232 B |
 | `build-next.sh` | KernelSU Next | 350,000 B |
 | `build-bakasu.sh` | BakaSU 35252（v4.2.0-rc3） | 435,616 B |
 | `build-sukisu.sh` | SukiSU Ultra 41097（HEAD 080ba098） | 544,848 B |

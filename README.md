@@ -9,12 +9,12 @@
 ## 当前状态
 
 - **双漏洞可选**：默认 `CVE-2026-64560`（逐字段零写 cred + `finit_module`）；`CVE-2026-98260` 使用本仓库的 `t98260_plant` 引擎（exec + POSIX 定时器 UAF、假 cred 指针写 + rootd），真机验证 uid 0、全量 CapEff、SELinux Permissive。98260 建议在干净开机后使用。
-- **KernelSU（官方 v3.3.1）**：真机跑通，模块 Live、`su` uid 0、管理器加冕、Enforcing 下可用。
+- **KernelSU（官方 main，UAPI6）**：LKM 按 `main` `db6263d3`（`v3.3.1-27-gdb6263d3`，versionCode 32707）用本机 6.18.21 GKI 重编，382,232 B、229 个 UNDEF 全部能由 `syms.txt` 解析；ksud 同版本（6,618,008 B，uapi 6）。管理器需用同版本的 `KernelSU_v3.3.1-27-gdb6263d3_32707-release.apk`（与旧版 32680 同签名，`adb install -r` 直接覆盖）；旧管理器的 supercall 仍可用，但没有 UAPI6 的模块 preinit 等新特性。注意 UAPI6 的 ksud 必须配 UAPI6 LKM（ksud 启动会校验），不能与旧 5 版 LKM 混用。
 - **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器对齐上游 `35252`（`v4.2.0-rc3`），真机加载成功；LKM 435,616 B。
 - **KernelSU Next**：LKM 350,000 B，已按同版本 GKI 编译并在 App 中可选，尚未做实机加载验证。
 - **SukiSU Ultra**：LKM/ksud 对齐 HEAD `080ba098`（版本 41097，`v4.2.1-r2-080ba098@main`），LKM 544,848 B、ksud 7,857,184 B；41068 真机加载成功，41097 为同 uapi 更新。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.22 已构建。
-- **全内置**：四个管理器的 ko/ksud、符号表、slide、越狱脚本与 SUSFS guard LKM 全部打包在 APK 内（`assets/pyb110` 约 51 MB，release APK 约 30 MB），运行时不联网；管理器 APK 由用户自行安装。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.23 已构建（31,236,582 B，md5 `003befe2f1aaec04f0ee4382fbb1f1a3`）。
+- **全内置**：四个管理器的 ko/ksud、符号表、slide、越狱脚本与 SUSFS guard LKM 全部打包在 APK 内（`assets/pyb110` 约 53 MB，release APK 约 31 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
 
@@ -87,7 +87,7 @@
 - **回收**：4096 个 socketpair 各持一个 8K skb（约 32 MB）抢 order-1 页；`mm_page_free` 4 s 等待 + 3 轮定时器 churn（每轮 4096 个，强制空 slab 回 buddy；v1.21 修正 v1.19 的 8 s 空等）；每次触发器用完立即关闭 `rss_stat`，避免 rss 记录洪水把回收扫描拖到 20 秒级。
 - **cred**：`rb_node.parent_color = node 自身`（`RB_EMPTY_NODE`，保证 cleanup 只摘链一次），指针写把 `task->cred` 指向页内假 cred；`rb_erase` 的第二次写落在 `node+0x08`（uid/gid），用一次 tile 零写补齐；假 cred 子进程内 fork+exec 自检 `Uid=0` 且 `CapEff=0x1ffffffffff` 通过后才起 rootd。
 - **管理器拉起**：SukiSU 的 Launcher Activity 是混淆名，`am start -p` 解析不到、`monkey -p` 只起进程不保证置前；脚本改为 `cmd package resolve-activity` 取组件后 `am start -n`，App 在脚本结束且模块已加载时再用 `getLaunchIntentForPackage` 从前景兜底拉起。
-- **实测（2026-10-29，PYB110 干净 boot）**：`t98260_plant --auto` 到 `ROOTD_READY` **1.75 s**（SELinux 1 次命中 492 ms、cred 585 ms、+8 补写 560 ms）；`run98260.sh` 全流程（probe → plant → late-load → ksud install → 管理器）**3.16 s**。用户 App 内实跑（SukiSU，v1.15）全流程 **<5 s**（用户口径，2026-10-29）；v1.16 把 plant 日志改为 `tee` 实时流式；v1.17 修复管理器自动拉起；v1.18 反 root 改为停 `riskdetect` HAL（不 disable/kill exsystemservice）；v1.19 free 等待 4 s→8 s；v1.20 运行时日志全英文；v1.21 改回 4 s 并加 slab churn（8 s 等待对“页未回 buddy”的 FREED=0 只会更慢）；v1.22 的 98260 部署去掉 `take_slide.sh`/`prep_solve`/`forker`（64560 仍用，98260 的 `SLIDE_MISSING` 兜底改为直接 `PATCH_FAIL`）。v1.21 用户干净 boot 复测：plant→rootd **2.66 s**（SELinux 786 ms、task 104 ms、cred 第一次 512 ms spray miss、第二次 712 ms 命中、+8 509 ms），两次 cred 均 `RECLAIM_FREED=1`、churn 未触发；`riskdetect=stopped` 保持 3 h+、KSU Live。
+- **实测（2026-10-29，PYB110 干净 boot）**：`t98260_plant --auto` 到 `ROOTD_READY` **1.75 s**（SELinux 1 次命中 492 ms、cred 585 ms、+8 补写 560 ms）；`run98260.sh` 全流程（probe → plant → late-load → ksud install → 管理器）**3.16 s**。用户 App 内实跑（SukiSU，v1.15）全流程 **<5 s**（用户口径，2026-10-29）；v1.16 把 plant 日志改为 `tee` 实时流式；v1.17 修复管理器自动拉起；v1.18 反 root 改为停 `riskdetect` HAL（不 disable/kill exsystemservice）；v1.19 free 等待 4 s→8 s；v1.20 运行时日志全英文；v1.21 改回 4 s 并加 slab churn（8 s 等待对“页未回 buddy”的 FREED=0 只会更慢）；v1.22 的 98260 部署去掉 `take_slide.sh`/`prep_solve`/`forker`（64560 仍用，98260 的 `SLIDE_MISSING` 兜底改为直接 `PATCH_FAIL`）。v1.21 用户干净 boot 复测：plant→rootd **2.66 s**（SELinux 786 ms、task 104 ms、cred 第一次 512 ms spray miss、第二次 712 ms 命中、+8 509 ms），两次 cred 均 `RECLAIM_FREED=1`、churn 未触发；`riskdetect=stopped` 保持 3 h+、KSU Live。v1.23 把官方 KernelSU 升到 `main`/UAPI6（LKM 按 `db6263d3` 自编 382,232 B、ksud 同源 6,618,008 B、管理器 32707 同签名可直接 `adb install -r` 覆盖）；其余三家管理器不变。
 
 **两个分支共用**
 
@@ -206,7 +206,7 @@ $CC -O2 -static -o prep_patch exploit/src/prep_patch.c
 $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 ```
 
-`run.sh` / `run98260.sh` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）、`PYB110_SUSFS`（`1` / `0`）与 `PYB110_LATE_LOAD`（98260，默认 `1`）选择行为。
+`run.sh` / `run98260.sh` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）与 `PYB110_SUSFS`（`1` / `0`）选择行为；98260 总是先试 `ksud late-load`，失败才回退到打补丁后的 `insmod`。
 
 ## 使用
 
