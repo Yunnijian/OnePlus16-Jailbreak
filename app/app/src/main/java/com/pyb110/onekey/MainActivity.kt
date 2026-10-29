@@ -159,7 +159,7 @@ class MainActivity : ComponentActivity() {
                         contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top),
                         topBar = {
                             TopAppBar(
-                                title = "OnePlus 16 Jailbreak",
+                                title = "Shark",
                                 scrollBehavior = scrollBehavior,
                                 navigationIcon = {
                                     IconButton(onClick = { showLogs = true }) {

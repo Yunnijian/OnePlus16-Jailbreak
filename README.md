@@ -1,4 +1,6 @@
-# OnePlus 16 Jailbreak
+# Shark
+
+OnePlus 16（PYB110）一键越狱工具。
 
 在 **OnePlus 16（PYB110，SM8950，Android 17 / ColorOS，内核 `6.18.21-android17-5-gf957accaf563-ab15926176-4k`）** 上，通过 **CVE-2026-64560** 或 **CVE-2026-98260** 提权，并加载 **内核态 root（KernelSU / KernelSU Next / BakaSU / SukiSU Ultra）** 的一键工具与源码。
 
@@ -9,11 +11,11 @@
 ## 当前状态
 
 - **双漏洞可选**：默认 `CVE-2026-64560`（逐字段零写 cred + `finit_module`）；`CVE-2026-98260` 使用本仓库的 `t98260_plant` 引擎（exec + POSIX 定时器 UAF、假 cred 指针写 + rootd），真机验证 uid 0、全量 CapEff、SELinux Permissive。98260 建议在干净开机后使用。
-- **KernelSU（官方 main，UAPI6）**：LKM 按 `main` `db6263d3`（`v3.3.1-27-gdb6263d3`，versionCode 32707）用本机 6.18.21 GKI 重编，382,232 B、229 个 UNDEF 全部能由 `syms.txt` 解析；ksud 同版本（6,618,008 B，uapi 6）。管理器需用同版本的 `KernelSU_v3.3.1-27-gdb6263d3_32707-release.apk`（与旧版 32680 同签名，`adb install -r` 直接覆盖）；旧管理器的 supercall 仍可用，但没有 UAPI6 的模块 preinit 等新特性。注意 UAPI6 的 ksud 必须配 UAPI6 LKM（ksud 启动会校验），不能与旧 5 版 LKM 混用。
-- **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器对齐上游 `35252`（`v4.2.0-rc3`），真机加载成功；LKM 435,616 B。
-- **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；已内置并在 App 中可选。
-- **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 真机加载成功。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.26 已构建（31,745,238 B，md5 `aa065725888bf4054d8a548a3a7c2530`）。
+- **KernelSU（官方 main，UAPI6）**：LKM 按 `main` `db6263d3`（`v3.3.1-27-gdb6263d3`，versionCode 32707）用本机 6.18.21 GKI 重编，382,232 B、229 个 UNDEF 全部能由 `syms.txt` 解析，真机验证通过；ksud 同版本（6,618,008 B，uapi 6）。管理器需用同版本的 `KernelSU_v3.3.1-27-gdb6263d3_32707-release.apk`（与旧版 32680 同签名，`adb install -r` 直接覆盖）；旧管理器的 supercall 仍可用，但没有 UAPI6 的模块 preinit 等新特性。注意 UAPI6 的 ksud 必须配 UAPI6 LKM（ksud 启动会校验），不能与旧 5 版 LKM 混用。
+- **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器对齐上游 `35252`（`v4.2.0-rc3`），LKM 435,616 B；真机验证通过（35252-6）。
+- **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；已内置并在 App 中可选，真机验证通过（33442-6）。
+- **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.28 已构建（31,822,666 B，md5 `f051b62132eb89374a63e16ca9e4b643`）。
 - **全内置**：四个管理器的 ko/ksud、符号表、slide、越狱脚本与 SUSFS guard LKM 全部打包在 APK 内（`assets/pyb110` 约 53 MB，release APK 约 31 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
@@ -26,8 +28,9 @@
   </tr>
   <tr>
     <td align="center"><img src="docs/screenshots/kernelsu-manager.jpg" width="170" alt="KernelSU 管理器"><br><sub><b>4 · KernelSU 管理器</b></sub></td>
-    <td align="center"><img src="docs/screenshots/bakasu-manager.jpg" width="170" alt="BakaSU 管理器"><br><sub><b>5 · BakaSU 管理器</b></sub></td>
-    <td align="center"><img src="docs/screenshots/sukisu-manager.jpg" width="170" alt="SukiSU Ultra 管理器"><br><sub><b>6 · SukiSU Ultra 管理器</b></sub></td>
+    <td align="center"><img src="docs/screenshots/ksunext-manager.jpg" width="170" alt="KernelSU-Next 管理器"><br><sub><b>5 · KernelSU-Next 管理器</b></sub></td>
+    <td align="center"><img src="docs/screenshots/bakasu-manager.jpg" width="170" alt="BakaSU 管理器"><br><sub><b>6 · BakaSU 管理器</b></sub></td>
+    <td align="center"><img src="docs/screenshots/sukisu-manager.jpg" width="170" alt="SukiSU Ultra 管理器"><br><sub><b>7 · SukiSU Ultra 管理器</b></sub></td>
   </tr>
 </table>
 
