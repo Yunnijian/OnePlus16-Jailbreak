@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { code, result ->
         if (code == REQ_SHIZUKU) {
             authorized = result == PackageManager.PERMISSION_GRANTED
-            addLog(if (authorized) "Shizuku 已授权" else "Shizuku 授权被拒绝")
+            addLog(if (authorized) "Shizuku authorized" else "Shizuku permission denied")
             if (authorized) refreshKsuAsync()
         }
     }
@@ -198,7 +198,7 @@ class MainActivity : ComponentActivity() {
                                         if (busy) return@TextButton
                                         when {
                                             !binderReady -> {
-                                                addLog("请先启动 Shizuku（无线调试）")
+                                                addLog("Start Shizuku (wireless debugging) first")
                                                 openShizuku()
                                             }
                                             !authorized -> Shizuku.requestPermission(REQ_SHIZUKU)
@@ -508,37 +508,37 @@ class MainActivity : ComponentActivity() {
     private fun updateAntiRootGuard(value: Boolean) {
         antiRootGuard = value
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("antiroot_guard", value).apply()
-        addLog("安全弹窗守卫: ${if (value) "开启（停止 riskdetect HAL，重启后恢复）" else "关闭"}")
+        addLog("Anti-root guard: ${if (value) "on (stop riskdetect HAL; restored on reboot)" else "off"}")
     }
 
     private fun updateSoftRebootAfter(value: Boolean) {
         softRebootAfter = value
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("soft_reboot_after", value).apply()
-        addLog("越狱后软重启: ${if (value) "开启" else "关闭"}")
+        addLog("Soft reboot after jailbreak: ${if (value) "on" else "off"}")
     }
 
     private fun updateUnloadGuard(value: Boolean) {
         unloadGuard = value
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("unload_guard", value).apply()
-        addLog("越狱后卸载内核安全防护: ${if (value) "开启" else "关闭"}")
+        addLog("Unload kernel security guard after jailbreak: ${if (value) "on" else "off"}")
     }
 
     private fun updateSusfsSupport(value: Boolean) {
         susfsSupport = value
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("susfs_support", value).apply()
-        addLog("SUSFS 支持: ${if (value) "开启（越狱成功后加载 ko）" else "关闭"}")
+        addLog("SUSFS support: ${if (value) "on (load ko after jailbreak)" else "off"}")
     }
 
     private fun selectExploit(kind: ExploitKind) {
         exploit = kind
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putString("exploit", kind.name).apply()
-        addLog("已选择漏洞利用: ${kind.fullLabel}")
+        addLog("Exploit selected: ${kind.fullLabel}")
     }
 
     private fun selectManager(kind: ManagerKind) {
         manager = kind
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putString("manager", kind.name).apply()
-        addLog("已选择 ROOT 管理器: ${kind.fullLabel}")
+        addLog("ROOT manager selected: ${kind.fullLabel}")
     }
 
     private fun resolveDeviceName(): String {
@@ -602,7 +602,7 @@ class MainActivity : ComponentActivity() {
 
     private fun openShizuku() {
         val intent = packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-        if (intent != null) startActivity(intent) else addLog("未找到 Shizuku 应用")
+        if (intent != null) startActivity(intent) else addLog("Shizuku app not found")
     }
 
     private fun shizukuEnv(): Array<String> = arrayOf(
@@ -614,12 +614,12 @@ class MainActivity : ComponentActivity() {
     private fun launchManager() {
         val intent = packageManager.getLaunchIntentForPackage(manager.pkg)
         if (intent == null) {
-            addLog("未找到管理器的启动入口: ${manager.pkg}")
+            addLog("Manager launch entry not found: ${manager.pkg}")
             return
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         runCatching { startActivity(intent) }
-            .onFailure { addLog("打开管理器失败: $it") }
+            .onFailure { addLog("Failed to open manager: $it") }
     }
 
     private fun runFlow() {
@@ -629,38 +629,38 @@ class MainActivity : ComponentActivity() {
             try {
                 val binder = Shizuku.getBinder()
                 if (binder == null) {
-                    addLog("Shizuku binder 为空")
+                    addLog("Shizuku binder is null")
                     return@launch
                 }
                 val service = IShizukuService.Stub.asInterface(binder)
                 if (service == null) {
-                    addLog("Shizuku service 为空")
+                    addLog("Shizuku service is null")
                     return@launch
                 }
                 val dir = deployDir(service)
-                addLog("部署工具到 $dir …")
+                addLog("Deploying tools to $dir ...")
                 stageAssets(service, dir, deployPlan())
-                addLog("开始执行 ${exploit.script}")
+                addLog("Starting ${exploit.script}")
                 val rc = runStreaming(service, arrayOf("sh", "$dir/${exploit.script}"), dir)
-                addLog("run.sh 退出码=$rc")
+                addLog("run.sh exit=$rc")
                 val (active, se) = readDeviceState(service)
                 withContext(Dispatchers.Main) {
                     ksuActive = active
                     selinuxText = se
                 }
-                addLog(if (active) "KernelSU 模块已加载" else "KernelSU 模块未加载")
+                addLog(if (active) "KernelSU module loaded" else "KernelSU module not loaded")
                 if (active && !softReboot) {
                     withContext(Dispatchers.Main) { launchManager() }
                 }
                 if (softReboot && rc == 0 && active) {
-                    addLog("越狱完成，执行软重启（重启 zygote）")
+                    addLog("Jailbreak complete; restarting zygote")
                     val rebootRc = runCatching {
                         service.newProcess(
                             arrayOf("su", "-c", "setprop ctl.restart zygote"),
                             shizukuEnv(), "/data/local/tmp"
                         ).waitFor()
                     }.getOrDefault(-1)
-                    if (rebootRc != 0) addLog("软重启命令失败 rc=$rebootRc")
+                    if (rebootRc != 0) addLog("Soft reboot failed rc=$rebootRc")
                 }
             } catch (t: Throwable) {
                 addLog("ERROR: $t")
@@ -725,7 +725,7 @@ class MainActivity : ComponentActivity() {
             shizukuEnv(), "/data/local/tmp"
         ).waitFor()
         if (mk != 0) {
-            addLog("部署目录不可写: $dir rc=$mk")
+            addLog("Deploy dir not writable: $dir rc=$mk")
             throw java.io.IOException("deploy dir not writable: $dir")
         }
 
@@ -740,11 +740,11 @@ class MainActivity : ComponentActivity() {
                     assets.open("pyb110/$assetName").use { copied = it.copyTo(out) }
                 }
             } catch (t: java.io.IOException) {
-                addLog("写入 $target 失败（目录/文件权限？）: ${t.message}")
+                addLog("Failed to write $target (dir/file permission?): ${t.message}")
                 throw t
             }
             val rc = p.waitFor()
-            if (rc != 0) addLog("部署失败 $target rc=$rc") else addLog("已部署 $target (${copied} B)")
+            if (rc != 0) addLog("Deploy failed $target rc=$rc") else addLog("Deployed $target (${copied} B)")
         }
 
         service.newProcess(

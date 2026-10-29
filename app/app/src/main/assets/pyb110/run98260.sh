@@ -75,7 +75,7 @@ load_susfs() {
 
 start_antiroot_guard() {
   if [ "$DISABLE_ANTIROOT" != "1" ]; then
-    echo "ANTIROOT_SKIP: 开关关闭，未停止 riskdetect"
+    echo "ANTIROOT_SKIP: switch off; riskdetect not stopped"
     return 0
   fi
   setsid sh -c "
@@ -88,7 +88,7 @@ start_antiroot_guard() {
     st=\$(su -c 'getprop init.svc.riskdetect' 2>/dev/null | tr -d '\r')
     echo \"ANTIROOT_STOPPED state=\$st\" >> '$D/antiroot.log'
   " >/dev/null 2>&1 &
-  echo "ANTIROOT_GUARD_BG: 已停止 riskdetect HAL（不自动恢复，重启后恢复）"
+  echo "ANTIROOT_GUARD_BG: stop riskdetect HAL requested (no restore; restored on reboot)"
 }
 
 wait_kernelsu() {
@@ -123,7 +123,7 @@ finish_manager() {
     su -c "pkill -9 t98260_plant 2>/dev/null; rm -f /data/local/tmp/t98260-root.sock" 2>&1
     echo "ROOTD_CLEANED"
   else
-    echo "ROOTD_KEPT: su 不可用，保留 rootd 兜底"
+    echo "ROOTD_KEPT: su unavailable; keeping rootd as fallback"
   fi
   load_susfs
   am force-stop "$MPKG" 2>/dev/null
@@ -160,13 +160,13 @@ fi
 
 echo "[2/4] run t98260_plant (auto slide)"
 if pidof t98260_plant >/dev/null 2>&1; then
-  echo "STALE_PLANT: $(pidof t98260_plant)；请先重启设备再跑 98260（避免释放持页进程）"
+  echo "STALE_PLANT: $(pidof t98260_plant); reboot before rerunning 98260 (avoid freeing the page-holding process)"
   exit 12
 fi
 rm -f plant.log t98260-root.sock
 setsid sh -c "./t98260_plant --auto --budget 240 2>&1 | tee plant.log" &
 sleep 0.1
-echo "PLANT_PID=$(pidof t98260_plant) (命中后 SELinux 变 Permissive)"
+echo "PLANT_PID=$(pidof t98260_plant) (SELinux becomes Permissive after a hit)"
 ROOTED=0
 i=0
 while [ $i -lt 1100 ]; do

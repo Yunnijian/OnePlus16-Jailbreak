@@ -23,7 +23,7 @@ stop_riskdetect() {
     echo "ANTIROOT_STOP_RC=$?"
     echo "ANTIROOT_STATE=$(su -c 'getprop init.svc.riskdetect' 2>/dev/null | tr -d '\r')"
   else
-    echo "ANTIROOT_SKIP: 开关关闭，未停止 riskdetect"
+    echo "ANTIROOT_SKIP: switch off; riskdetect not stopped"
   fi
 }
 
