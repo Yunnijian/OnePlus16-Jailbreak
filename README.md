@@ -2,7 +2,7 @@
 
 OnePlus 16（PYB110）一键越狱工具。
 
-在 **OnePlus 16（PYB110，SM8950，Android 17 / ColorOS，内核 `6.18.21-android17-5-gf957accaf563-ab15926176-4k`）** 上，通过 **CVE-2026-64560** 或 **CVE-2026-98260** 提权，并加载 **内核态 root（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）** 的一键工具与源码。
+在 **OnePlus 16（PYB110，SM8950，Android 17 / ColorOS，内核 `6.18.21-android17-5-gf957accaf563-ab15926176-4k`）** 上，通过 **CVE-2026-64560** / **CVE-2026-98260** / **6.12.69-ex** 提权，并加载 **内核态 root（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）** 的一键工具与源码。
 
 设备未解锁 BL，起手只有 adb shell（uid 2000）。工具通过 Shizuku 以 shell 身份驱动设备端 exploit，最终加载按本机 GKI 6.18.21 自编的 LKM：64560 分支走 `finit_module`，98260 分支走 `ksud late-load`（失败回退 `insmod`）。
 
@@ -10,14 +10,15 @@ OnePlus 16（PYB110）一键越狱工具。
 
 ## 当前状态
 
-- **双漏洞可选**：默认 `CVE-2026-64560`（逐字段零写 cred + `finit_module`）；`CVE-2026-98260` 使用本仓库的 `t98260_plant` 引擎（exec + POSIX 定时器 UAF、假 cred 指针写 + rootd），真机验证 uid 0、全量 CapEff、SELinux Permissive。98260 建议在干净开机后使用。
+- **三个漏洞/分支可选**：默认 `CVE-2026-64560`（逐字段零写 cred + `finit_module`）；`CVE-2026-98260` 使用本仓库的 `t98260_plant` 引擎（exec + POSIX 定时器 UAF、假 cred 指针写 + rootd），真机验证 uid 0、全量 CapEff、SELinux Permissive。98260 建议在干净开机后使用。
 - **KernelSU（官方 main，UAPI6）**：LKM 按 `main` `db6263d3`（`v3.3.1-27-gdb6263d3`，versionCode 32707）用本机 6.18.21 GKI 重编，382,232 B、229 个 UNDEF 全部能由 `syms.txt` 解析，真机验证通过；ksud 同版本（6,618,008 B，uapi 6）。管理器需用同版本的 `KernelSU_v3.3.1-27-gdb6263d3_32707-release.apk`（与旧版 32680 同签名，`adb install -r` 直接覆盖）；旧管理器的 supercall 仍可用，但没有 UAPI6 的模块 preinit 等新特性。注意 UAPI6 的 ksud 必须配 UAPI6 LKM（ksud 启动会校验），不能与旧 5 版 LKM 混用。
 - **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器对齐上游 `35252`（`v4.2.0-rc3`），LKM 435,616 B；真机验证通过（35252-6）。
 - **FinaSU（v1.3.2 最新）**：按 `master` `9b32bde4` 重编 LKM 496,744 B（UNDEF 232 全命中）、ksud 7,561,328 B（uapi 6），管理器 v1.3.2（33090）；使用 `KSU_DYNAMIC_MANAGER` 动态签名（`ksud dynamic set-apk`）。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；已内置并在 App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.30 已构建（37,641,107 B，md5 `c3a00262f594a12aeebd220a69b554a0`）。
-- **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本与 SUSFS guard LKM 全部打包在 APK 内（`assets/pyb110` 约 61 MB，release APK 约 38 MB），运行时不联网；管理器 APK 由用户自行安装。
+- **6.12.69-ex（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。`t61269` 走 fake cred + `ksud late-load`，脚本先校验 `uname -r` 含 `6.12.69`；部署不依赖内置 ko/ksud/syms，ksud 取自已安装管理器的 `libksud.so`。**尚未在 PLZ110 真机验证**。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.31 已构建（37,793,082 B，md5 `f2355e3aff05fc2758cc6b14c193c4e9`）。
+- **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本、SUSFS guard LKM 与 6.12.69-ex 的 `t61269` 全部打包在 APK 内（`assets/pyb110` 约 62 MB，release APK 约 38 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
 
@@ -99,6 +100,12 @@ OnePlus 16（PYB110）一键越狱工具。
 - **cred**：`rb_node.parent_color = node 自身`（`RB_EMPTY_NODE`，保证 cleanup 只摘链一次），指针写把 `task->cred` 指向页内假 cred；`rb_erase` 的第二次写落在 `node+0x08`（uid/gid），用一次 tile 零写补齐；假 cred 子进程内 fork+exec 自检 `Uid=0` 且 `CapEff=0x1ffffffffff` 通过后才起 rootd。
 - **管理器拉起**：SukiSU 的 Launcher Activity 是混淆名，`am start -p` 解析不到、`monkey -p` 只起进程不保证置前；脚本改为 `cmd package resolve-activity` 取组件后 `am start -n`，App 在脚本结束且模块已加载时再用 `getLaunchIntentForPackage` 从前景兜底拉起。
 - **实测（2026-10-29，PYB110 干净 boot）**：`t98260_plant --auto` 到 `ROOTD_READY` **1.75 s**（SELinux 1 次命中 492 ms、cred 585 ms、+8 补写 560 ms）；`run98260.sh` 全流程（probe → plant → late-load → ksud install → 管理器）**3.16 s**。用户 App 内实跑（SukiSU，v1.15）全流程 **<5 s**（用户口径，2026-10-29）；v1.16 把 plant 日志改为 `tee` 实时流式；v1.17 修复管理器自动拉起；v1.18 反 root 改为停 `riskdetect` HAL（不 disable/kill exsystemservice）；v1.19 free 等待 4 s→8 s；v1.20 运行时日志全英文；v1.21 改回 4 s 并加 slab churn（8 s 等待对“页未回 buddy”的 FREED=0 只会更慢）；v1.22 的 98260 部署去掉 `take_slide.sh`/`prep_solve`/`forker`（64560 仍用，98260 的 `SLIDE_MISSING` 兜底改为直接 `PATCH_FAIL`）。v1.21 用户干净 boot 复测：plant→rootd **2.66 s**（SELinux 786 ms、task 104 ms、cred 第一次 512 ms spray miss、第二次 712 ms 命中、+8 509 ms），两次 cred 均 `RECLAIM_FREED=1`、churn 未触发；`riskdetect=stopped` 保持 3 h+、KSU Live。v1.23 把官方 KernelSU 升到 `main`/UAPI6（LKM 按 `db6263d3` 自编 382,232 B、ksud 同源 6,618,008 B、管理器 32707 同签名可直接 `adb install -r` 覆盖）；其余三家管理器不变。v1.26 修复管理器被打开两次（`ksud late-load` 结束时已重启管理器，脚本在 late-load 成功时不再 `force-stop`+`am start`，只有 insmod 回退/已加载路径才由脚本拉起）；v1.24 改 98260 回收策略：`mm_page_free` 等待 4 s→1.2 s、churn 从 CPU0 改到 victim CPU1、trace 扫描命中即停，卡住的 slab 直接放弃换新 victim。
+
+**6.12.69-ex（run612.sh + t61269）**
+
+- 目标内核必须是 `6.12.69`（脚本先 `uname -r` 校验，否则 `KERNEL_MISMATCH` 退出）。
+- 按本仓库提速方法改造：关闭 `rss_stat` 洪水、看到 `mm_page_free` 后再喷 32 MB、1.2 s 等待 + victim CPU churn、timer 数 2048；失败会 park 持 zombie，**不能 kill，只能重启**。
+- fake cred 成功后由注入的 `ksu_stage.sh` 用所选管理器的 `libksud.so` 做 `late-load --kmi android16-6.12`，再 `ksud install`；管理器由 late-load 自身拉起，App 前台兜底。
 
 **两个分支共用**
 
@@ -223,7 +230,7 @@ $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 ## 使用
 
 1. 用无线调试启动 Shizuku，并授权本 App。
-2. 在「ROOT管理器」下拉选择 KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra，在「漏洞利用方式」下拉选择 CVE-2026-64560 或 CVE-2026-98260。切换管理器后需重启再越狱（已加载模块不能热替换）。
+2. 在「ROOT管理器」下拉选择 KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra，在「漏洞利用方式」下拉选择 CVE-2026-64560、CVE-2026-98260 或 6.12.69-ex（6.12.69-ex 只接受 6.12.69 内核）。切换管理器后需重启再越狱（已加载模块不能热替换）。
 3. 98260 建议在干净开机后执行：`t98260_plant --probe` 会先核对内核 release 与 trace 通道；plant 通常 2 秒内到 rootd（SELinux 首次命中受 spray 影响，预算 240 秒）。
 4. 四个流程开关：
    - 「越狱后禁用安全弹窗」：拿到 su 后停止 `riskdetect` HAL（`stop riskdetect`），不自动恢复、重启后恢复；不触碰 `com.oplus.exsystemservice`/截图服务。

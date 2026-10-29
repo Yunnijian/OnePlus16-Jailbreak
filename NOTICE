@@ -58,3 +58,11 @@ The application icon is drawn by this project.
    Source: https://github.com/LyraVoid/FinaSU
    License: GPL-2.0
    Used: LKM source at build time; ksud / manager are upstream release artifacts.
+
+11. YuKongA/CVE-2026-98260 (6.12.69-ex branch)
+   Source: https://github.com/YuKongA/CVE-2026-98260
+   License: none declared upstream (repository has no LICENSE file).
+   Used: timer.c modified with this project's fast-tuning and bundled as
+         assets/pyb110/t61269 for the experimental 6.12.69-ex option.
+         Redistribution is NOT cleared by the upstream author; treat this
+         binary as a local research build until a license/permission exists.

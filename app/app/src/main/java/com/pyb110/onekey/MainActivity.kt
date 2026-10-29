@@ -678,6 +678,9 @@ class MainActivity : ComponentActivity() {
             ExploitKind.CVE98260 -> listOf(
                 "t98260_plant", "t98260_su", "prep_patch", "run98260.sh"
             )
+            ExploitKind.CVE61269 -> listOf(
+                "t61269", "run612.sh"
+            )
         }
         val (ko, ksud) = when (manager) {
             ManagerKind.KERNELSU -> "ksu-base.ko" to "ksud_official"
@@ -686,13 +689,16 @@ class MainActivity : ComponentActivity() {
             ManagerKind.BAKASU -> "ksu-base-bakasu.ko" to "ksud_bakasu"
             ManagerKind.SUKISU -> "ksu-base-sukisu.ko" to "ksud_sukisu"
         }
-        val extra = mutableListOf(
-            "syms.txt" to "syms.txt",
-            ko to ko,
-            ksud to ksud
-        )
+        val extra = mutableListOf<Pair<String, String>>()
+        if (exploit != ExploitKind.CVE61269) {
+            extra.add("syms.txt" to "syms.txt")
+            extra.add(ko to ko)
+            extra.add(ksud to ksud)
+        }
         if (exploit == ExploitKind.CVE64560) extra.add("take_slide.sh" to "take_slide.sh")
-        if (susfsSupport) extra.add("susfs_guard_lkm.ko" to "susfs_guard_lkm.ko")
+        if (susfsSupport && exploit != ExploitKind.CVE61269) {
+            extra.add("susfs_guard_lkm.ko" to "susfs_guard_lkm.ko")
+        }
         return common.map { it to it } + extra
     }
 
@@ -793,7 +799,8 @@ class MainActivity : ComponentActivity() {
 
     private enum class ExploitKind(val fullLabel: String, val script: String) {
         CVE64560("CVE-2026-64560", "run.sh"),
-        CVE98260("CVE-2026-98260", "run98260.sh")
+        CVE98260("CVE-2026-98260", "run98260.sh"),
+        CVE61269("6.12.69-ex", "run612.sh")
     }
 
     private enum class ManagerKind(val fullLabel: String, val pkg: String, val manager: String) {
