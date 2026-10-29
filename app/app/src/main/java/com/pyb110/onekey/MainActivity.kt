@@ -676,7 +676,7 @@ class MainActivity : ComponentActivity() {
                 "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2", "forker", "run.sh"
             )
             ExploitKind.CVE98260 -> listOf(
-                "t98260_plant", "t98260_su", "prep_solve", "prep_patch", "forker", "run98260.sh"
+                "t98260_plant", "t98260_su", "prep_patch", "run98260.sh"
             )
         }
         val (ko, ksud) = when (manager) {
@@ -687,10 +687,10 @@ class MainActivity : ComponentActivity() {
         }
         val extra = mutableListOf(
             "syms.txt" to "syms.txt",
-            "take_slide.sh" to "take_slide.sh",
             ko to ko,
             ksud to ksud
         )
+        if (exploit == ExploitKind.CVE64560) extra.add("take_slide.sh" to "take_slide.sh")
         if (susfsSupport) extra.add("susfs_guard_lkm.ko" to "susfs_guard_lkm.ko")
         return common.map { it to it } + extra
     }
