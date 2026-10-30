@@ -679,7 +679,7 @@ class MainActivity : ComponentActivity() {
                 "t98260_plant", "t98260_su", "prep_patch", "run98260.sh"
             )
             ExploitKind.CVE61269 -> listOf(
-                "t61269", "run612.sh"
+                "t61269", "t61269_su", "run612.sh"
             )
         }
         val (ko, ksud) = when (manager) {

@@ -16,9 +16,9 @@ OnePlus 16（PYB110）一键越狱工具。
 - **FinaSU（v1.3.2 最新）**：按 `master` `9b32bde4` 重编 LKM 496,744 B（UNDEF 232 全命中）、ksud 7,561,328 B（uapi 6），管理器 v1.3.2（33090）；使用 `KSU_DYNAMIC_MANAGER` 动态签名（`ksud dynamic set-apk`）。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；已内置并在 App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
-- **6.12.69-ex（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。`t61269` 走 fake cred + `ksud late-load`，脚本先校验 `uname -r` 含 `6.12.69`；部署不依赖内置 ko/ksud/syms，ksud 取自已安装管理器的 `libksud.so`。**尚未在 PLZ110 真机验证**。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.31 已构建（37,793,082 B，md5 `f2355e3aff05fc2758cc6b14c193c4e9`）。
-- **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本、SUSFS guard LKM 与 6.12.69-ex 的 `t61269` 全部打包在 APK 内（`assets/pyb110` 约 62 MB，release APK 约 38 MB），运行时不联网；管理器 APK 由用户自行安装。
+- **6.12.69-ex（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。按 98260 的逻辑重排为 **plant → rootd → ksud late-load → install → 管理器**：`t61269` 只负责 UAF 与 rootd，`t61269_su` 是 rootd 客户端，`run612.sh` 负责校验内核、调 ksud、安装与收尾；部署不带 ko/syms/ksud，ksud 取自已安装管理器的 `libksud.so`。**尚未在 PLZ110 真机验证**。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.33 已构建（38,677,555 B，md5 `17615f92b41420b4b09f392dadbc3baf`）。
+- **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本、SUSFS guard LKM 与 6.12.69-ex 的 `t61269` 全部打包在 APK 内（`assets/pyb110` 约 63 MB，release APK 约 39 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
 
@@ -104,8 +104,11 @@ OnePlus 16（PYB110）一键越狱工具。
 **6.12.69-ex（run612.sh + t61269）**
 
 - 目标内核必须是 `6.12.69`（脚本先 `uname -r` 校验，否则 `KERNEL_MISMATCH` 退出）。
-- 按本仓库提速方法改造：关闭 `rss_stat` 洪水、看到 `mm_page_free` 后再喷 32 MB、1.2 s 等待 + victim CPU churn、timer 数 2048；失败会 park 持 zombie，**不能 kill，只能重启**。
-- fake cred 成功后由注入的 `ksu_stage.sh` 用所选管理器的 `libksud.so` 做 `late-load --kmi android16-6.12`，再 `ksud install`；管理器由 late-load 自身拉起，App 前台兜底。
+- `t61269` 只做 UAF → fake cred → rootd（`/data/local/tmp/t61269-root.sock`），不再在载荷内部跑 ksud；`t61269_su -c` 负责把命令交给 rootd 执行。
+- `run612.sh` 按 98260 的顺序：plant → 等 `ROOTD_READY` → 停 `riskdetect` → `ksud late-load --kmi android16-6.12`（失败去掉 kmi 重试）→ 等 `kernelsu` → `ksud install` → 等 su → FinaSU 动态加冕 → 截图组件恢复。
+- 日志实时流式：plant 用 `tail -n +1 -f t61269.log` 跟随，rootd 命令输出直接透传；每 5 秒打印 `WAIT_ROOTD` / `WAIT_KSU`。
+- 提速参数保持：关闭 `rss_stat` 洪水、free 后 32 MB 喷发、1.2 s 等待 + victim CPU churn、2048 timers；失败会 park 持 zombie，**不能 kill，只能重启**。
+- 管理器和 rootd 都由 late-load 拉起/保留；App 前台兜底。
 
 **两个分支共用**
 
