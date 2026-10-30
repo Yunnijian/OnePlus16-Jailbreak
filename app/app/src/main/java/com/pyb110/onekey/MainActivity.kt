@@ -698,8 +698,13 @@ class MainActivity : ComponentActivity() {
         // manager's ksud as a fallback when its APK has no extracted libksud.
         extra.add(ksud to ksud)
         if (exploit == ExploitKind.CVE64560) extra.add("take_slide.sh" to "take_slide.sh")
-        if (susfsSupport && exploit != ExploitKind.CVE61269) {
-            extra.add("susfs_guard_lkm.ko" to "susfs_guard_lkm.ko")
+        if (susfsSupport) {
+            val susfs = if (exploit == ExploitKind.CVE61269) {
+                "susfs_guard_lkm-6.12.ko"
+            } else {
+                "susfs_guard_lkm.ko"
+            }
+            extra.add(susfs to susfs)
         }
         return common.map { it to it } + extra
     }

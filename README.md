@@ -17,8 +17,8 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；已内置并在 App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。按 98260 的逻辑重排为 **plant → rootd → ksud late-load → install → 管理器**：`t61269` 只负责 UAF 与 rootd，`t61269_su` 是 rootd 客户端，`run612.sh` 负责校验内核、调 ksud、安装与收尾；部署不带 ko/syms，ksud 优先取管理器 APK 内的载荷（SukiSU 为随机名），找不到再用内置 `ksud_<manager>`。已在 PLZ110（6.12.69）用 SukiSU 41100 真机跑通，连续复测命中率正常。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.41 已构建（38,678,859 B，md5 `6c9d99f01c40cdc1c06a29af52d32e38`）。
-- **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本、SUSFS guard LKM 与 CVE-2026-98260-6.12 的 `t61269` 全部打包在 APK 内（`assets/pyb110` 约 63 MB，release APK 约 39 MB），运行时不联网；管理器 APK 由用户自行安装。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.42 已构建（40,077,826 B，md5 `247fc7b1e6bd8eb77df1a86d6d1aad9e`）。
+- **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本、SUSFS guard LKM 与 CVE-2026-98260-6.12 的 `t61269` 全部打包在 APK 内（`assets/pyb110` 约 66 MB，release APK 约 40 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
 
@@ -107,6 +107,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - `t61269` 只做 UAF → fake cred → rootd（`/data/local/tmp/t61269-root.sock`），不再在载荷内部跑 ksud；`t61269_su -c` 负责把命令交给 rootd 执行。
 - CVE-2026-98260-6.12 的部署计划会带上所选管理器的 `ksud` 资产；`run612.sh` 取 ksud 的顺序是：管理器 APK 的 `libksud.so` → 包名限定的 `find` → APK 内 `lib/arm64-v8a/libksud.so`（有 unzip 时）→ 内置 `ksud_<manager>` → `/data/adb/ksu/bin/ksud`，并打印 `KSUD_VERSION`。
 - `run612.sh` 按 98260 的顺序：plant → 等 `ROOTD_READY` → 停 `riskdetect` → **同一条 rootd 命令先 `ksud install` 再 `late-load`**（KSU 起来后 SELinux 会恢复 Enforcing，新的 rootd 连接会被拒）→ 用 shell `/proc/modules` **或可用的 `su -c id`** 验模块（SukiSU 可能把模块从 `/proc/modules` 隐藏，此时打印 `KSU_HIDDEN`）→ `su -c id` 验 su → FinaSU 动态加冕 → 截图组件恢复。
+- **SUSFS（6.12）**：开关打开时随包部署上游 `susfs_guard_lkm-android16-6.12.ko`（v2.3.0-r18.5，3,258,016 B）；su 可用后由 `load_susfs` 依次尝试 `ksud insmod`/`/data/adb/ksud`/裸 `insmod`（`expose_proc=1`），用 `/sys/module/susfs_guard_lkm` 或 `/proc/susfs_kstat`/`/proc/susfs_path` 判活，日志 `SUSFS_LOADED/ALREADY/LOAD_FAIL`。
 - su 可用后 `su -c "pkill -9 t61269; rm -f t61269-root.sock"`（`ROOTD_CLEANED`），避免 zygote 软重启后旧 rootd 残留导致下一次 `STALE_PLANT`；若流程在 su 前失败，rootd 保留，必须**完整重启**（软重启不会清掉它）。
 - 日志实时流式：plant 用 `tail -n +1 -f t61269.log` 跟随，rootd 命令输出直接透传；每 5 秒打印 `WAIT_ROOTD` / `WAIT_KSU`。
 - 提速参数：关闭 `rss_stat` 洪水、**两段喷发**——exec/free 窗口内预喷 256 MB（8 线程 × 4096 次），看到 `mm_page_free` 后再喷 256 MB；free 等待 2.5 s、命中窗 3 s、churn 最多 3 轮、2048 timers。失败会 park 持 zombie，**不能 kill，只能冷启动**。plant 内检测到 `parking without reap` 会立即 `PLANT_FAIL_MISS`，不再空等 60 s。
