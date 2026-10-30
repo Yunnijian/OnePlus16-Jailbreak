@@ -6,6 +6,7 @@ cd "$D" || exit 1
 
 MANAGER=${PYB110_MANAGER:-kernelsu}
 DISABLE_ANTIROOT=${PYB110_DISABLE_ANTIROOT:-1}
+UNLOAD_GUARD=${PYB110_UNLOAD_GUARD:-0}
 case "$MANAGER" in
   finasu) MPKG=me.yuki.fina; BKS=ksud_finasu ;;
   next) MPKG=com.rifsxd.ksunext; BKS=ksud_next ;;
@@ -88,6 +89,39 @@ fi
 [ -x "$KSUD" ] || KSUD=""
 echo "KSUD=${KSUD:-none} bundled=$BKS"
 [ -n "$KSUD" ] && echo "KSUD_VERSION=$("$KSUD" --version 2>&1 | head -n 1)"
+
+start_antiroot_guard() {
+  if [ "$DISABLE_ANTIROOT" != "1" ]; then
+    echo "ANTIROOT_SKIP: switch off; riskdetect not stopped"
+    return 0
+  fi
+  setsid sh -c "
+    n=0
+    while [ \$n -lt 100 ]; do
+      su -c 'stop riskdetect' >/dev/null 2>&1 && break
+      sleep 0.1
+      n=\$((n+1))
+    done
+    st=\$(su -c 'getprop init.svc.riskdetect' 2>/dev/null | tr -d '\r')
+    echo \"ANTIROOT_STOPPED state=\$st\" >> '$D/antiroot.log'
+  " >/dev/null 2>&1 &
+  echo "ANTIROOT_GUARD_BG: stop riskdetect HAL requested (no restore; restored on reboot)"
+}
+
+unload_guard() {
+  if [ "$UNLOAD_GUARD" = "1" ]; then
+    echo "UNLOAD_GUARD: rmmod oplus_secure_guard_new"
+    su -c "rmmod oplus_secure_guard_new" 2>&1
+    echo "UNLOAD_GUARD_RC=$?"
+    if grep -qi oplus_secure_guard /proc/modules 2>/dev/null; then
+      echo "UNLOAD_GUARD_STILL_LOADED"
+    else
+      echo "UNLOAD_GUARD_GONE"
+    fi
+  else
+    echo "UNLOAD_GUARD_SKIP"
+  fi
+}
 
 susfs_loaded() {
   su -c "test -d /sys/module/susfs_guard_lkm || test -e /proc/susfs_kstat || test -e /proc/susfs_path" 2>/dev/null
@@ -177,27 +211,22 @@ if ./t61269_su -c "test -d /sys/fs/pstore" >/dev/null 2>&1; then
   ./t61269_su -c "cat /sys/fs/pstore/console-ramoops* 2>/dev/null | tail -n 200" 2>&1
 fi
 
-RISK_STATE=$(getprop init.svc.riskdetect 2>/dev/null | tr -d '\r')
-if [ "$DISABLE_ANTIROOT" = "1" ] && [ "$RISK_STATE" = "running" ]; then
-  ./t61269_su -c "stop riskdetect" 2>&1
-  echo "ANTIROOT_STOP_RC=$?"
-else
-  echo "ANTIROOT_SKIP state=${RISK_STATE:-absent}"
-fi
+start_antiroot_guard
 
 if [ -z "$KSUD" ]; then
   echo "KSUD_MISSING: install the matching manager APK (pkg=$MPKG); looked at APK libs, $D/$BKS and /data/adb/ksu/bin/ksud"
   exit 14
 fi
-# Install first, then load.  The rootd connection must be established while
-# SELinux is still permissive: once late-load brings KSU up, the kernel
-# re-enables Enforcing and a new rootd connect is denied.
-echo "[2/4] install + late-load via $MANAGER"
-CMD="$KSUD install; echo KSUD_INSTALL_RC=\$?; $KSUD late-load --kmi $KMI --allow-shell --package-name $MPKG; echo LATE_LOAD_RC=\$?; $KSUD debug info 2>&1 | head -n 20; logcat -d -s ksud 2>/dev/null | tail -n 25 ; if grep -qi '^kernelsu ' /proc/modules 2>/dev/null || /system/bin/su -c id 2>/dev/null | grep -q uid=0; then touch /data/local/tmp/t61269-retire; fi"
+# The rootd connection must be established while SELinux is still permissive:
+# once late-load brings KSU up, the kernel re-enables Enforcing and a new rootd
+# connect is denied.  ksud install and the guard unload run after su instead,
+# matching the 98260 branch's ordering.
+echo "[2/4] late-load via $MANAGER"
+CMD="$KSUD late-load --kmi $KMI --allow-shell --package-name $MPKG; echo LATE_LOAD_RC=\$?; $KSUD debug info 2>&1 | head -n 20; logcat -d -s ksud 2>/dev/null | tail -n 25 ; if grep -qi '^kernelsu ' /proc/modules 2>/dev/null || /system/bin/su -c id 2>/dev/null | grep -q uid=0; then touch /data/local/tmp/t61269-retire; fi"
 ./t61269_su -c "$CMD" 2>&1
 if ! wait_kernelsu_shell; then
   echo "LATE_LOAD_RETRY: without --kmi"
-  CMD="$KSUD install; echo KSUD_INSTALL_RC=\$?; $KSUD late-load --allow-shell --package-name $MPKG; echo LATE_LOAD_RC=\$?; $KSUD debug info 2>&1 | head -n 20; logcat -d -s ksud 2>/dev/null | tail -n 25 ; if grep -qi '^kernelsu ' /proc/modules 2>/dev/null || /system/bin/su -c id 2>/dev/null | grep -q uid=0; then touch /data/local/tmp/t61269-retire; fi"
+  CMD="$KSUD late-load --allow-shell --package-name $MPKG; echo LATE_LOAD_RC=\$?; $KSUD debug info 2>&1 | head -n 20; logcat -d -s ksud 2>/dev/null | tail -n 25 ; if grep -qi '^kernelsu ' /proc/modules 2>/dev/null || /system/bin/su -c id 2>/dev/null | grep -q uid=0; then touch /data/local/tmp/t61269-retire; fi"
   ./t61269_su -c "$CMD" 2>&1
 fi
 if ! wait_kernelsu_shell; then
@@ -225,6 +254,11 @@ else
 fi
 
 if [ "$SUOK" = "1" ]; then
+  cp -f "$KSUD" "$D/ksud_61269" 2>/dev/null && chmod 755 "$D/ksud_61269" && KSUD="$D/ksud_61269"
+  unload_guard
+  su -c "$KSUD install" 2>&1
+  echo "KSUD_INSTALL_RC=$?"
+  echo "ANTIROOT_STATE=$(getprop init.svc.riskdetect 2>/dev/null | tr -d '\r')"
   if [ "$MANAGER" = "finasu" ] && [ -n "$APK" ]; then
     su -c "$KSUD dynamic set-apk '$APK'" 2>&1
     echo "DYNAMIC_SET_APK_RC=$?"

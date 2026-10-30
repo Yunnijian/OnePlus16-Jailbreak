@@ -17,7 +17,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；已内置并在 App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。按 98260 的逻辑重排为 **plant → rootd → ksud late-load → install → 管理器**：`t61269` 只负责 UAF 与 rootd，`t61269_su` 是 rootd 客户端，`run612.sh` 负责校验内核、调 ksud、安装与收尾；部署不带 ko/syms，ksud 优先取管理器 APK 内的载荷（SukiSU 为随机名），找不到再用内置 `ksud_<manager>`。已在 PLZ110（6.12.69）用 SukiSU 41100 真机跑通，连续复测命中率正常。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.45 已构建（40,078,098 B，md5 `e1fae277fca27f685387f9d00828ed5d`）。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.47 已构建（40,078,370 B，md5 `b6b3db9bfcc315c06eb034d32e8aca28`）。
 - **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本、SUSFS guard LKM 与 CVE-2026-98260-6.12 的 `t61269` 全部打包在 APK 内（`assets/pyb110` 约 66 MB，release APK 约 40 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
@@ -106,7 +106,8 @@ OnePlus 16（PYB110）一键越狱工具。
 - 目标内核必须是 `6.12.69`（脚本先 `uname -r` 校验，否则 `KERNEL_MISMATCH` 退出）。
 - `t61269` 只做 UAF → fake cred → rootd（`/data/local/tmp/t61269-root.sock`），不再在载荷内部跑 ksud；`t61269_su -c` 负责把命令交给 rootd 执行。
 - CVE-2026-98260-6.12 的部署计划会带上所选管理器的 `ksud` 资产；`run612.sh` 取 ksud 的顺序是：管理器 APK 的 `libksud.so` → 包名限定的 `find` → APK 内 `lib/arm64-v8a/libksud.so`（有 unzip 时）→ 内置 `ksud_<manager>` → `/data/adb/ksu/bin/ksud`，并打印 `KSUD_VERSION`。
-- `run612.sh` 按 98260 的顺序：plant → 等 `ROOTD_READY` → 停 `riskdetect` → **同一条 rootd 命令先 `ksud install` 再 `late-load`**（KSU 起来后 SELinux 会恢复 Enforcing，新的 rootd 连接会被拒）→ 用 shell `/proc/modules` **或可用的 `su -c id`** 验模块（SukiSU 可能把模块从 `/proc/modules` 隐藏，此时打印 `KSU_HIDDEN`）→ `su -c id` 验 su → FinaSU 动态加冕 → 截图组件恢复。
+- `run612.sh` 与 98260 时序一致：plant → 等 `ROOTD_READY` → 后台启动反 root 守卫（轮询 `su -c 'stop riskdetect'`）→ **同一条 rootd 命令只做 `late-load`**（KSU 起来后 SELinux 会恢复 Enforcing，新的 rootd 连接会被拒）→ 用 shell `/proc/modules` **或可用的 `su -c id`** 验模块（SukiSU 可能把模块从 `/proc/modules` 隐藏，此时打印 `KSU_HIDDEN`）→ `su -c id` 验 su → 如开启「内核防护」`su -c "rmmod oplus_secure_guard_new"` → `su -c "$KSUD install"` → FinaSU 动态加冕 → 截图组件恢复。ksud 安装与内核防护卸载都放在 su 可用之后，和 98260 的 `finish_manager` 一致。
+- **内核防护（6.12）**：开关打开时在 su 可用后执行 `rmmod oplus_secure_guard_new`（PMS110 实测模块名），日志 `UNLOAD_GUARD_GONE`/`UNLOAD_GUARD_STILL_LOADED`；加载前不再尝试卸载，也不再停 `riskdetect`。
 - **SUSFS（6.12）**：开关打开时随包部署上游 `susfs_guard_lkm-android16-6.12.ko`（v2.3.0-r18.5，3,258,016 B）；su 可用后由 `load_susfs` 依次尝试 `ksud insmod`/`/data/adb/ksud`/裸 `insmod`（`expose_proc=1`），用 `/sys/module/susfs_guard_lkm` 或 `/proc/susfs_kstat`/`/proc/susfs_path` 判活，日志 `SUSFS_LOADED/ALREADY/LOAD_FAIL`。
 - 成功后让 rootd **自动退役**：handoff 命令在 KSU 已 Live（`/proc/modules` 或 `su -c id`）时写 `/data/local/tmp/t61269-retire`，rootd server 在服务完这条命令后自行退出，父进程 park 持住喷发页；不再尝试 KSU 起来后的新 rootd 连接（会被 SELinux 拒）。同 boot 不再重跑，下一次越狱前必须**冷启动**。`PSTORE_TAIL` 扩大到 200 行。`PLANT_OK` 后会尝试 dump 上一次开机的 `/sys/fs/pstore/console-ramoops*` 尾部，便于定位延迟 panic。
 - 日志实时流式：plant 用 `tail -n +1 -f t61269.log` 跟随，rootd 命令输出直接透传；每 5 秒打印 `WAIT_ROOTD` / `WAIT_KSU`。
@@ -116,7 +117,7 @@ OnePlus 16（PYB110）一键越狱工具。
 **两个分支共用**
 
 - **截图链路恢复**：两条分支在 `ksud install` 后检查 `com.oplus.exsystemservice` 与 `com.oplus.screenshot`，发现被禁用（旧版逻辑或手动误禁）就 `pm enable --user 0` 恢复，日志 `SCREENSHOT_STACK_OK/ENABLED/ABSENT/SKIP`；已启用时只做检查，不影响截图与反 root 守卫。
-- **反 root 守卫**：ColorOS 的 `com.oplus.exsystemservice` 会在检测到提权后弹窗并在 15 秒后 `reboot("Malicious app try to root devices")`。可选开关开启时，64560 在 `[6/6]`、98260 在 `PLANT_OK` 后立刻后台启动守卫；守卫轮询到 KSU su 可用就 `stop riskdetect`（上游 AIDL HAL `vendor.oplus.hardware.riskdetect.IRiskDetect/default`），**不自动恢复，重启后恢复**；不再 disable/kill exsystemservice，因此不会拆掉同 host 里的 `OplusScreenshotManagerService`，截图链路不受影响。
+- **反 root 守卫**：ColorOS 的 `com.oplus.exsystemservice` 会在检测到提权后弹窗并在 15 秒后 `reboot("Malicious app try to root devices")`。可选开关开启时，64560 在 `[6/6]`、98260 与 61269 在 `PLANT_OK` 后立刻后台启动守卫；守卫轮询到 KSU su 可用就 `stop riskdetect`（上游 AIDL HAL `vendor.oplus.hardware.riskdetect.IRiskDetect/default`），**不自动恢复，重启后恢复**；不再 disable/kill exsystemservice，因此不会拆掉同 host 里的 `OplusScreenshotManagerService`，截图链路不受影响。
 
 ## 目录结构
 
@@ -231,7 +232,7 @@ $CC -O2 -static -o prep_patch exploit/src/prep_patch.c
 $CC -O2 -static -o t64560_w2 exploit/src/t64560_w2.c
 ```
 
-`run.sh` / `run98260.sh` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）与 `PYB110_SUSFS`（`1` / `0`）选择行为；98260 总是先试 `ksud late-load`，失败才回退到打补丁后的 `insmod`。
+`run.sh` / `run98260.sh` / `run612.sh` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）与 `PYB110_SUSFS`（`1` / `0`）选择行为；98260 总是先试 `ksud late-load`，失败才回退到打补丁后的 `insmod`。
 
 ## 使用
 
