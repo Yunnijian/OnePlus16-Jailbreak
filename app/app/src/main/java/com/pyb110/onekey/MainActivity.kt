@@ -800,9 +800,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private enum class ExploitKind(val fullLabel: String, val script: String) {
-        CVE64560("CVE-2026-64560", "run.sh"),
-        CVE98260("CVE-2026-98260", "run98260.sh"),
-        CVE61269("6.12.69-ex", "run612.sh")
+        CVE64560("CVE-2026-64560-6.18", "run.sh"),
+        CVE98260("CVE-2026-98260-6.18", "run98260.sh"),
+        CVE61269("CVE-2026-98260-6.12", "run612.sh")
     }
 
     private enum class ManagerKind(val fullLabel: String, val pkg: String, val manager: String) {
