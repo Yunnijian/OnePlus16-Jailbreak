@@ -89,6 +89,43 @@ fi
 echo "KSUD=${KSUD:-none} bundled=$BKS"
 [ -n "$KSUD" ] && echo "KSUD_VERSION=$("$KSUD" --version 2>&1 | head -n 1)"
 
+susfs_loaded() {
+  su -c "test -d /sys/module/susfs_guard_lkm || test -e /proc/susfs_kstat || test -e /proc/susfs_path" 2>/dev/null
+}
+
+load_susfs() {
+  if [ "${PYB110_SUSFS:-0}" != "1" ]; then
+    echo "SUSFS_SKIP"
+    return 0
+  fi
+  if [ ! -f "$D/susfs_guard_lkm-6.12.ko" ]; then
+    echo "SUSFS_MISSING"
+    return 0
+  fi
+  if susfs_loaded; then
+    echo "SUSFS_ALREADY"
+    return 0
+  fi
+  for c in "$KSUD" /data/adb/ksud /data/adb/ksu/bin/ksud; do
+    [ -n "$c" ] || continue
+    echo "SUSFS_INSMOD_TRY=$c"
+    su -c "$c insmod '$D/susfs_guard_lkm-6.12.ko' expose_proc=1" 2>&1
+    sleep 1
+    if susfs_loaded; then
+      echo "SUSFS_LOADED"
+      return 0
+    fi
+  done
+  echo "SUSFS_INSMOD_FALLBACK=insmod"
+  su -c "insmod '$D/susfs_guard_lkm-6.12.ko' expose_proc=1" 2>&1
+  sleep 1
+  if susfs_loaded; then
+    echo "SUSFS_LOADED"
+  else
+    echo "SUSFS_LOAD_FAIL"
+  fi
+}
+
 wait_kernelsu_shell() {
   n=0
   while [ $n -lt 30 ]; do
@@ -188,6 +225,7 @@ if [ "$SUOK" = "1" ]; then
     su -c "$KSUD dynamic set-apk '$APK'" 2>&1
     echo "DYNAMIC_SET_APK_RC=$?"
   fi
+  load_susfs
   DIS=$(su -c "pm list packages -d --user 0" 2>/dev/null | tr -d '\r')
   for p in com.oplus.exsystemservice com.oplus.screenshot; do
     if su -c "pm list packages '$p'" 2>/dev/null | grep -qx "package:$p"; then
