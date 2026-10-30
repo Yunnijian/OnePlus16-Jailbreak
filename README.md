@@ -17,7 +17,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；已内置并在 App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **6.12.69-ex（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。按 98260 的逻辑重排为 **plant → rootd → ksud late-load → install → 管理器**：`t61269` 只负责 UAF 与 rootd，`t61269_su` 是 rootd 客户端，`run612.sh` 负责校验内核、调 ksud、安装与收尾；部署不带 ko/syms/ksud，ksud 取自已安装管理器的 `libksud.so`。**尚未在 PLZ110 真机验证**。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.33 已构建（38,677,555 B，md5 `17615f92b41420b4b09f392dadbc3baf`）。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.38 已构建（38,678,531 B，md5 `b0f8a56ea9786a72f275e9e2df7d0121`）。
 - **全内置**：五个管理器的 ko/ksud、符号表、slide、越狱脚本、SUSFS guard LKM 与 6.12.69-ex 的 `t61269` 全部打包在 APK 内（`assets/pyb110` 约 63 MB，release APK 约 39 MB），运行时不联网；管理器 APK 由用户自行安装。
 
 ## 截图
@@ -105,9 +105,11 @@ OnePlus 16（PYB110）一键越狱工具。
 
 - 目标内核必须是 `6.12.69`（脚本先 `uname -r` 校验，否则 `KERNEL_MISMATCH` 退出）。
 - `t61269` 只做 UAF → fake cred → rootd（`/data/local/tmp/t61269-root.sock`），不再在载荷内部跑 ksud；`t61269_su -c` 负责把命令交给 rootd 执行。
-- `run612.sh` 按 98260 的顺序：plant → 等 `ROOTD_READY` → 停 `riskdetect` → `ksud late-load --kmi android16-6.12`（失败去掉 kmi 重试）→ 等 `kernelsu` → `ksud install` → 等 su → FinaSU 动态加冕 → 截图组件恢复。
+- 6.12.69-ex 的部署计划会带上所选管理器的 `ksud` 资产；`run612.sh` 取 ksud 的顺序是：管理器 APK 的 `libksud.so` → 包名限定的 `find` → APK 内 `lib/arm64-v8a/libksud.so`（有 unzip 时）→ 内置 `ksud_<manager>` → `/data/adb/ksu/bin/ksud`，并打印 `KSUD_VERSION`。
+- `run612.sh` 按 98260 的顺序：plant → 等 `ROOTD_READY` → 停 `riskdetect` → **同一条 rootd 命令先 `ksud install` 再 `late-load`**（KSU 起来后 SELinux 会恢复 Enforcing，新的 rootd 连接会被拒）→ 用 shell `/proc/modules` **或可用的 `su -c id`** 验模块（SukiSU 可能把模块从 `/proc/modules` 隐藏，此时打印 `KSU_HIDDEN`）→ `su -c id` 验 su → FinaSU 动态加冕 → 截图组件恢复。
+- su 可用后 `su -c "pkill -9 t61269; rm -f t61269-root.sock"`（`ROOTD_CLEANED`），避免 zygote 软重启后旧 rootd 残留导致下一次 `STALE_PLANT`；若流程在 su 前失败，rootd 保留，必须**完整重启**（软重启不会清掉它）。
 - 日志实时流式：plant 用 `tail -n +1 -f t61269.log` 跟随，rootd 命令输出直接透传；每 5 秒打印 `WAIT_ROOTD` / `WAIT_KSU`。
-- 提速参数保持：关闭 `rss_stat` 洪水、free 后 32 MB 喷发、1.2 s 等待 + victim CPU churn、2048 timers；失败会 park 持 zombie，**不能 kill，只能重启**。
+- 提速参数：关闭 `rss_stat` 洪水、free 后 **256 MB** 喷发（4096 sockets × 8 线程 × 4096 次）、free 等待 2.5 s、命中窗 2.5 s、churn 最多 3 轮、2048 timers；失败会 park 持 zombie，**不能 kill，只能冷启动**。plant 内检测到 `parking without reap` 会立即 `PLANT_FAIL_MISS`，不再空等 60 s。
 - 管理器和 rootd 都由 late-load 拉起/保留；App 前台兜底。
 
 **两个分支共用**

@@ -494,7 +494,7 @@ class MainActivity : ComponentActivity() {
 
     private fun readDeviceState(service: IShizukuService): Pair<Boolean, String> {
         val p = service.newProcess(
-            arrayOf("sh", "-c", "grep -qi kernelsu /proc/modules && echo YES || echo NO; getenforce"),
+            arrayOf("sh", "-c", "if grep -qi kernelsu /proc/modules; then echo YES; elif timeout 3 su -c id 2>/dev/null | grep -q uid=0; then echo YES; else echo NO; fi; getenforce"),
             shizukuEnv(), "/data/local/tmp"
         )
         val lines = ParcelFileDescriptor.AutoCloseInputStream(p.getInputStream())
@@ -693,8 +693,10 @@ class MainActivity : ComponentActivity() {
         if (exploit != ExploitKind.CVE61269) {
             extra.add("syms.txt" to "syms.txt")
             extra.add(ko to ko)
-            extra.add(ksud to ksud)
         }
+        // 6.12.69-ex loads the LKM embedded in ksud; keep the selected
+        // manager's ksud as a fallback when its APK has no extracted libksud.
+        extra.add(ksud to ksud)
         if (exploit == ExploitKind.CVE64560) extra.add("take_slide.sh" to "take_slide.sh")
         if (susfsSupport && exploit != ExploitKind.CVE61269) {
             extra.add("susfs_guard_lkm.ko" to "susfs_guard_lkm.ko")
