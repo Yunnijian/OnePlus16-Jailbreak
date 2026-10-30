@@ -494,7 +494,7 @@ class MainActivity : ComponentActivity() {
 
     private fun readDeviceState(service: IShizukuService): Pair<Boolean, String> {
         val p = service.newProcess(
-            arrayOf("sh", "-c", "grep -qi kernelsu /proc/modules && echo YES || echo NO; getenforce"),
+            arrayOf("sh", "-c", "if grep -qi kernelsu /proc/modules; then echo YES; elif timeout 3 su -c id 2>/dev/null | grep -q uid=0; then echo YES; else echo NO; fi; getenforce"),
             shizukuEnv(), "/data/local/tmp"
         )
         val lines = ParcelFileDescriptor.AutoCloseInputStream(p.getInputStream())
@@ -678,6 +678,9 @@ class MainActivity : ComponentActivity() {
             ExploitKind.CVE98260 -> listOf(
                 "t98260_plant", "t98260_su", "prep_patch", "run98260.sh"
             )
+            ExploitKind.CVE61269 -> listOf(
+                "t61269", "t61269_su", "run612.sh"
+            )
         }
         val (ko, ksud) = when (manager) {
             ManagerKind.KERNELSU -> "ksu-base.ko" to "ksud_official"
@@ -686,13 +689,18 @@ class MainActivity : ComponentActivity() {
             ManagerKind.BAKASU -> "ksu-base-bakasu.ko" to "ksud_bakasu"
             ManagerKind.SUKISU -> "ksu-base-sukisu.ko" to "ksud_sukisu"
         }
-        val extra = mutableListOf(
-            "syms.txt" to "syms.txt",
-            ko to ko,
-            ksud to ksud
-        )
+        val extra = mutableListOf<Pair<String, String>>()
+        if (exploit != ExploitKind.CVE61269) {
+            extra.add("syms.txt" to "syms.txt")
+            extra.add(ko to ko)
+        }
+        // 6.12.69-ex loads the LKM embedded in ksud; keep the selected
+        // manager's ksud as a fallback when its APK has no extracted libksud.
+        extra.add(ksud to ksud)
         if (exploit == ExploitKind.CVE64560) extra.add("take_slide.sh" to "take_slide.sh")
-        if (susfsSupport) extra.add("susfs_guard_lkm.ko" to "susfs_guard_lkm.ko")
+        if (susfsSupport && exploit != ExploitKind.CVE61269) {
+            extra.add("susfs_guard_lkm.ko" to "susfs_guard_lkm.ko")
+        }
         return common.map { it to it } + extra
     }
 
@@ -792,8 +800,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private enum class ExploitKind(val fullLabel: String, val script: String) {
-        CVE64560("CVE-2026-64560", "run.sh"),
-        CVE98260("CVE-2026-98260", "run98260.sh")
+        CVE64560("CVE-2026-64560-6.18", "run.sh"),
+        CVE98260("CVE-2026-98260-6.18", "run98260.sh"),
+        CVE61269("CVE-2026-98260-6.12", "run612.sh")
     }
 
     private enum class ManagerKind(val fullLabel: String, val pkg: String, val manager: String) {
