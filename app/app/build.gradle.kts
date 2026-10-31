@@ -23,8 +23,8 @@ android {
         applicationId = "com.pyb110.onekey"
         minSdk = 31
         targetSdk = 37
-        versionCode = 37
-        versionName = "1.47"
+        versionCode = 46
+        versionName = "1.56"
     }
     buildFeatures {
         compose = true

@@ -8,11 +8,11 @@ MANAGER=${PYB110_MANAGER:-kernelsu}
 DISABLE_ANTIROOT=${PYB110_DISABLE_ANTIROOT:-1}
 UNLOAD_GUARD=${PYB110_UNLOAD_GUARD:-0}
 case "$MANAGER" in
-  finasu) MPKG=me.yuki.fina; BKS=ksud_finasu ;;
-  next) MPKG=com.rifsxd.ksunext; BKS=ksud_next ;;
-  bakasu) MPKG=com.resukisu.resukisu; BKS=ksud_bakasu ;;
-  sukisu) MPKG=com.sukisu.ultra; BKS=ksud_sukisu ;;
-  *) MANAGER=kernelsu; MPKG=me.weishu.kernelsu; BKS=ksud_official ;;
+  finasu) MPKG=me.yuki.fina ;;
+  next) MPKG=com.rifsxd.ksunext ;;
+  bakasu) MPKG=com.resukisu.resukisu ;;
+  sukisu) MPKG=com.sukisu.ultra ;;
+  *) MANAGER=kernelsu; MPKG=me.weishu.kernelsu ;;
 esac
 KMI=android16-6.12
 SOCK=/data/local/tmp/t61269-root.sock
@@ -25,7 +25,7 @@ case "$KERNEL" in
 esac
 echo "KERNEL=$KERNEL"
 
-chmod 755 t61269 t61269_su "$BKS" 2>/dev/null
+chmod 755 t61269 t61269_su 2>/dev/null
 BOOT_ID=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null | tr -d '-' | tr -d '\r')
 UPTIME=$(cut -d. -f1 /proc/uptime 2>/dev/null)
 echo "BOOT_ID=$BOOT_ID UPTIME=${UPTIME}s"
@@ -54,41 +54,43 @@ fi
 
 APK=$(pm path "$MPKG" 2>/dev/null | sed -n 's/^package://p' | head -n 1)
 KSUD=""
-if [ -n "$APK" ]; then
-  KSUD="$(dirname "$APK")/lib/arm64/libksud.so"
-fi
-# Some managers randomize the embedded ksud payload name (SukiSU). Try the
-# large native payloads in the manager's lib dir and keep the one that
-# identifies itself as ksud.
+KSUD_SOURCE=""
 if [ -n "$APK" ]; then
   LIBDIR="$(dirname "$APK")/lib/arm64"
-  for f in "$LIBDIR"/lib*.so; do
-    [ -f "$f" ] || continue
-    sz=$(wc -c < "$f" 2>/dev/null)
-    [ "${sz:-0}" -gt 2000000 ] || continue
-    cp -f "$f" "$D/ksud_cand" 2>/dev/null || continue
-    chmod 755 "$D/ksud_cand" 2>/dev/null
-    ver=$(timeout 3 "$D/ksud_cand" --version 2>/dev/null | head -n 1)
-    case "$ver" in
-      *uapi*)
-        KSUD="$D/ksud_cand"
-        echo "KSUD_MANAGER_PAYLOAD=$f $ver"
-        break
-        ;;
-    esac
-  done
+  if [ -x "$LIBDIR/libksud.so" ]; then
+    KSUD="$LIBDIR/libksud.so"
+    KSUD_SOURCE=manager-apk
+  fi
+  # Some managers randomize the embedded ksud payload name (SukiSU). Execute
+  # each large native payload in place and keep the one that identifies as ksud.
+  if [ -z "$KSUD" ]; then
+    for f in "$LIBDIR"/lib*.so; do
+      [ -x "$f" ] || continue
+      sz=$(wc -c < "$f" 2>/dev/null)
+      [ "${sz:-0}" -gt 2000000 ] || continue
+      ver=$(timeout 3 "$f" --version 2>/dev/null | head -n 1)
+      case "$ver" in
+        *uapi*)
+          KSUD="$f"
+          KSUD_SOURCE=manager-payload
+          echo "KSUD_MANAGER_PAYLOAD=$f $ver"
+          break
+          ;;
+      esac
+    done
+  fi
 fi
-[ -x "$KSUD" ] || KSUD=$(find /data/app -path "*${MPKG}*/lib/arm64/libksud.so" 2>/dev/null | head -n 1)
-[ -x "$KSUD" ] || KSUD=$(find /data/app -path "*${MPKG}*" -name libksud.so 2>/dev/null | head -n 1)
-if [ -z "$KSUD" ] && [ -n "$APK" ] && command -v unzip >/dev/null 2>&1; then
-  unzip -p "$APK" lib/arm64-v8a/libksud.so > "$D/ksud_from_apk" 2>/dev/null &&
-    chmod 755 "$D/ksud_from_apk" && KSUD="$D/ksud_from_apk"
-fi
-[ -x "$KSUD" ] || KSUD="$D/$BKS"
-[ -x "$KSUD" ] || KSUD=/data/adb/ksu/bin/ksud
+[ -x "$KSUD" ] || { KSUD=$(find /data/app -path "*${MPKG}*/lib/arm64/libksud.so" 2>/dev/null | head -n 1); [ -n "$KSUD" ] && KSUD_SOURCE=manager-apk; }
+[ -x "$KSUD" ] || { KSUD=$(find /data/app -path "*${MPKG}*" -name libksud.so 2>/dev/null | head -n 1); [ -n "$KSUD" ] && KSUD_SOURCE=manager-apk; }
+[ -x "$KSUD" ] || { KSUD=/data/adb/ksu/bin/ksud; [ -x "$KSUD" ] && KSUD_SOURCE=data-adb; }
+[ -x "$KSUD" ] || { KSUD=/data/adb/ksud; [ -x "$KSUD" ] && KSUD_SOURCE=data-adb; }
 [ -x "$KSUD" ] || KSUD=""
-echo "KSUD=${KSUD:-none} bundled=$BKS"
+echo "KSUD=${KSUD:-none} source=${KSUD_SOURCE:-none}"
 [ -n "$KSUD" ] && echo "KSUD_VERSION=$("$KSUD" --version 2>&1 | head -n 1)"
+if [ -z "$KSUD" ]; then
+  echo "KSUD_MISSING: install the manager APK (pkg=$MPKG) first; ksud is executed from its APK, no bundled copy"
+  exit 14
+fi
 
 start_antiroot_guard() {
   if [ "$DISABLE_ANTIROOT" != "1" ]; then
@@ -212,11 +214,6 @@ if ./t61269_su -c "test -d /sys/fs/pstore" >/dev/null 2>&1; then
 fi
 
 start_antiroot_guard
-
-if [ -z "$KSUD" ]; then
-  echo "KSUD_MISSING: install the matching manager APK (pkg=$MPKG); looked at APK libs, $D/$BKS and /data/adb/ksu/bin/ksud"
-  exit 14
-fi
 # The rootd connection must be established while SELinux is still permissive:
 # once late-load brings KSU up, the kernel re-enables Enforcing and a new rootd
 # connect is denied.  ksud install and the guard unload run after su instead,
@@ -254,7 +251,6 @@ else
 fi
 
 if [ "$SUOK" = "1" ]; then
-  cp -f "$KSUD" "$D/ksud_61269" 2>/dev/null && chmod 755 "$D/ksud_61269" && KSUD="$D/ksud_61269"
   unload_guard
   su -c "$KSUD install" 2>&1
   echo "KSUD_INSTALL_RC=$?"

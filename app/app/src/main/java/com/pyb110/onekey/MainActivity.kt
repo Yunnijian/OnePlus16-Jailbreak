@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
     private var authorized by mutableStateOf(false)
     private var binderReady by mutableStateOf(false)
     private var ksuActive by mutableStateOf(false)
-    private var exploit by mutableStateOf(ExploitKind.CVE64560)
+    private var exploit by mutableStateOf(ExploitKind.CVE98260)
     private var manager by mutableStateOf(ManagerKind.KERNELSU)
     private var kernelVersion by mutableStateOf("未知")
     private var deviceModel by mutableStateOf("未知")
@@ -140,7 +140,7 @@ class MainActivity : ComponentActivity() {
         unloadGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("unload_guard", false)
         susfsSupport = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("susfs_support", false)
         val savedExploit = getSharedPreferences("pyb110", MODE_PRIVATE).getString("exploit", null)
-        exploit = runCatching { ExploitKind.valueOf(savedExploit ?: "") }.getOrDefault(ExploitKind.CVE64560)
+        exploit = runCatching { ExploitKind.valueOf(savedExploit ?: "") }.getOrDefault(ExploitKind.CVE98260)
         val savedManager = getSharedPreferences("pyb110", MODE_PRIVATE).getString("manager", null)
         manager = runCatching { ManagerKind.valueOf(savedManager ?: "") }.getOrDefault(ManagerKind.KERNELSU)
         kernelVersion = runCatching { android.system.Os.uname().release }.getOrDefault("未知")
@@ -637,12 +637,25 @@ class MainActivity : ComponentActivity() {
                     addLog("Shizuku service is null")
                     return@launch
                 }
+                val ksudPreflight = service.newProcess(
+                    arrayOf("sh", "-c",
+                        "[ -n \"$(pm path '${manager.pkg}' 2>/dev/null)\" ] || [ -x /data/adb/ksu/bin/ksud ] || [ -x /data/adb/ksud ]"),
+                    shizukuEnv(), "/data/local/tmp"
+                ).waitFor()
+                if (ksudPreflight != 0) {
+                    addLog("Manager not installed: ${manager.pkg}. Install the manager APK first; ksud is executed from its APK, no bundled copy.")
+                    return@launch
+                }
                 val dir = deployDir(service)
                 addLog("Deploying tools to $dir ...")
                 stageAssets(service, dir, deployPlan())
-                addLog("Starting ${exploit.script}")
-                val rc = runStreaming(service, arrayOf("sh", "$dir/${exploit.script}"), dir)
-                addLog("run.sh exit=$rc")
+                addLog("Starting ${exploit.fullLabel}")
+                val cmd = when (exploit) {
+                    ExploitKind.CVE98260 -> arrayOf("$dir/t98260", "run")
+                    ExploitKind.CVE61269 -> arrayOf("sh", "$dir/run612.sh")
+                }
+                val rc = runStreaming(service, cmd, dir)
+                addLog("exploit exit=$rc")
                 val (active, se) = readDeviceState(service)
                 withContext(Dispatchers.Main) {
                     ksuActive = active
@@ -672,32 +685,10 @@ class MainActivity : ComponentActivity() {
 
     private fun deployPlan(): List<Pair<String, String>> {
         val common = when (exploit) {
-            ExploitKind.CVE64560 -> listOf(
-                "prep_solve", "prep_patch", "t64560_v36", "t64560_loader2", "t64560_w2", "forker", "run.sh"
-            )
-            ExploitKind.CVE98260 -> listOf(
-                "t98260_plant", "t98260_su", "prep_patch", "run98260.sh"
-            )
-            ExploitKind.CVE61269 -> listOf(
-                "t61269", "t61269_su", "run612.sh"
-            )
-        }
-        val (ko, ksud) = when (manager) {
-            ManagerKind.KERNELSU -> "ksu-base.ko" to "ksud_official"
-            ManagerKind.FINASU -> "ksu-base-finasu.ko" to "ksud_finasu"
-            ManagerKind.NEXT -> "ksu-base-next.ko" to "ksud_next"
-            ManagerKind.BAKASU -> "ksu-base-bakasu.ko" to "ksud_bakasu"
-            ManagerKind.SUKISU -> "ksu-base-sukisu.ko" to "ksud_sukisu"
+            ExploitKind.CVE98260 -> listOf("t98260")
+            ExploitKind.CVE61269 -> listOf("t61269", "t61269_su", "run612.sh")
         }
         val extra = mutableListOf<Pair<String, String>>()
-        if (exploit != ExploitKind.CVE61269) {
-            extra.add("syms.txt" to "syms.txt")
-            extra.add(ko to ko)
-        }
-        // 6.12.69-ex loads the LKM embedded in ksud; keep the selected
-        // manager's ksud as a fallback when its APK has no extracted libksud.
-        extra.add(ksud to ksud)
-        if (exploit == ExploitKind.CVE64560) extra.add("take_slide.sh" to "take_slide.sh")
         if (susfsSupport) {
             val susfs = if (exploit == ExploitKind.CVE61269) {
                 "susfs_guard_lkm-6.12.ko"
@@ -727,7 +718,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stageAssets(service: IShizukuService, dir: String, files: List<Pair<String, String>>) {
-        val stale = "killall -9 t64560_loader2 t64560_w2 t64560_v36 brm_plant t98260_plant 2>/dev/null"
+        val stale = "killall -9 t64560_loader2 t64560_w2 t64560_v36 brm_plant 2>/dev/null"
         runCatching {
             service.newProcess(
                 arrayOf("sh", "-c", stale),
@@ -804,10 +795,9 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private enum class ExploitKind(val fullLabel: String, val script: String) {
-        CVE64560("CVE-2026-64560-6.18", "run.sh"),
-        CVE98260("CVE-2026-98260-6.18", "run98260.sh"),
-        CVE61269("CVE-2026-98260-6.12", "run612.sh")
+    private enum class ExploitKind(val fullLabel: String) {
+        CVE98260("CVE-2026-98260-6.18"),
+        CVE61269("CVE-2026-98260-6.12")
     }
 
     private enum class ManagerKind(val fullLabel: String, val pkg: String, val manager: String) {

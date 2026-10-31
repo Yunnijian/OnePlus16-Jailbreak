@@ -29,7 +29,7 @@ docker run --rm \
 | --- | --- | --- |
 | `build-kernelsu.sh` | 官方 KernelSU main `db6263d3`（UAPI6，32707） | 382,232 B |
 | `build-next.sh` | KernelSU Next dev `da0b3f37`（33442） | 489,264 B |
-| `build-bakasu.sh` | BakaSU 35252（v4.2.0-rc3） | 435,616 B |
+| `build-bakasu.sh` | BakaSU 35253（4.2.0-rc3-82-g5785bdb8） | 435,616 B |
 | `build-sukisu.sh` | SukiSU Ultra v4.3.0 `e67b14e6`（41100） | 545,040 B |
 | `build-finasu.sh` | FinaSU master `9b32bde4`（v1.3.2 / 33090） | 496,744 B |
 | `build-susfs.sh` | SUSFS guard LKM（vendored） | 3,456,440 B（未 strip） |
@@ -57,6 +57,7 @@ ksud insmod susfs_guard_lkm-6.18.21.ko expose_proc=1
 
 ## 注意
 
+- DDK 镜像内置 `KDIR=/opt/ddk/kdir/android17-6.18`（6.18.32）；必须 `-e KDIR=/work/kdir/android17-6.18` 显式覆盖，否则编出的 vermagic 是 6.18.32。使用本地 kdir 时还要把 GKI 源挂到其 Makefile 记录的路径（`/work/gki-6.18.21`）。
 - 不能只改 vermagic 复用其它 minor 版本的官方 ko；ABI/CFI 不匹配会在加载后崩溃。
 - 每次设备重启 KASLR slide 变化，ko 必须在设备端用 `prep_patch` 按当次 slide 重新写符号。
 - 模块加载参数只需 `allow_shell=1`；官方 / Next / BakaSU 都定义了该参数。

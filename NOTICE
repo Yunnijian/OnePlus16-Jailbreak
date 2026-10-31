@@ -1,11 +1,16 @@
 Third-party components
 ======================
 
+Note: ksud is not bundled. The App executes the ksud payload
+(manager APK's lib/arm64/libksud.so or the randomized equivalent) in place.
+The manager APK itself is installed by the user.
+
+
 1. CVE-2026-64560 public tooling
    Source: https://github.com/Feng1586/CVE-2026-64560-public
    License: Apache-2.0
-   Used: t64560_v36 / t64560_loader2 / forker binaries (packed in App assets),
-         selected upstream scripts under third_party/.
+   Used: historical source/flow reference only. The 64560 chain and its
+         binaries are no longer packed or deployed by the App.
 
 2. KernelSU
    Source: https://github.com/tiann/KernelSU
@@ -36,8 +41,8 @@ Third-party components
    Source: https://github.com/AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak
    License: MIT
    Used: background and flow reference for the 98260 branch. The bundled
-         t98260_plant / t98260_su binaries are built from exploit/src in
-         this repository. License text:
+         t98260 single-entry binary is built from exploit/rust-t98260 plus
+         the C plant in exploit/src in this repository. License text:
          third_party/cve-2026-98260-LICENSES/AzirX1337-MIT.txt
 
 8. Shizuku API
