@@ -17,7 +17,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；管理器由用户安装，App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。按 98260 的逻辑重排为 **plant → rootd → ksud late-load → install → 管理器**：`t61269` 只负责 UAF 与 rootd，`t61269_su` 是 rootd 客户端，`run612.sh` 负责校验内核、调 ksud、安装与收尾；部署不带 ko/syms，ksud 运行时从已安装管理器 APK 的 `lib/arm64` 原地执行（SukiSU 为随机名，按大小 + `--version` 识别），不再拷贝、不再内置。已在 PLZ110（6.12.69）用 SukiSU 41100 真机跑通，连续复测命中率正常。
-- App 为底部三 tab（首页/日志/历史，Miuix `NavigationBar` 组件）：首页是分组设置（ROOT 管理器与漏洞利用方式各一个下拉 + 四个流程开关），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除）；release 签名 APK v1.65 已构建（6,784,550 B，md5 `b57d2894b74587239748a2a87b791be8`）。
+- App 为底部三 tab（首页/日志/历史，Miuix `NavigationBar` 组件）：首页是分组设置（ROOT 管理器与漏洞利用方式各一个下拉 + 四个流程开关），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除）；release 签名 APK v1.67 已构建（6,784,930 B，md5 `1610e6483e1ae99aa69214c89c904671`）。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
 - **内置范围**：APK 只内置 6.18 单入口 `t98260`、6.12 的 `t61269/t61269_su/run612.sh` 和两个 SUSFS ko（`assets/pyb110` 约 9 MB，release APK 约 6.6 MB）；**不再内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
@@ -80,6 +80,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - **写入与提权**：伪造 `rb_node` 瓦片，借 `rb_erase` 完成零写/指针写；先以同一原语把 `selinux_state - 7` 写零进入 Permissive，再把假 cred 装进 `task->cred`。
 - **交接（无 rootd）**：假 cred 子进程直接 fork root shell 执行 `ksud late-load --kmi android17-6.18`，**只调一次，无重试、无 `--kmi` 兜底**（五家管理器 ksud 均已核对内嵌该 KMI）；子进程完成后 park 不退出。不再创建 socket、不再需要 KSU 后的退役连接，也不回退 `insmod`。
 - **并行收尾（v1.57）**：`--auto` 在 plant 进程内做内核/trace 预检，不再单独 fork `--probe`；`ksud install` 之后，SUSFS 装载、截图链路恢复、管理器拉起与 APK/FinaSU 收尾并行执行；SUSFS ko 由 App 在 plant 启动后以 `.tmp` + rename 原子落盘，Rust 最多等 5 s。`wait_su` 仍保持在模块 Live 之后，避免提前 su 与 late-load 抢时序。
+- **失败出口（v1.66）**：失败不再整进程 park——喷发页交给后台 `t98260-hold` 持有（继承 socket 防止页被复用），主进程退出 13，`stale_plant` 放行 holder，同 boot 可直接重跑第二次越狱；holder 90 s 后自动退出（覆盖 `exit_creds` 的 RCU 延迟窗口即可，不留残留进程）。测试钩子 `PYB110_FORCE_FAIL=cred` 强制走失败出口。失败后 SELinux 保持 Permissive（零写不可逆），下次成功后由 KSU 恢复 Enforcing。
 - **slide 自推**：`t98260` 内部的 C plant 从 2048 条 `do_timer_create+0xb8` 的 `kmem_cache_alloc` 记录取众数 call_site，直接得到 KASLR slide；不再需要 `take_slide.sh`/`prep_solve`/`syms.txt`。这里的“自推命中”指 slide 值一次推出且正确；后续 `SLIDE_TRY` 重试的是 SELinux 零写的页回收，不是重新推导 slide（重试期间 slide 值不变）。
 - **回收**：4096 个 socketpair 各持一个 8K skb（约 32 MB）抢 order-1 页；`mm_page_free` 最多等 1.2 s，每 400 ms 在 timer CPU（CPU1）上 churn 一轮 4096 个定时器，最多两轮；超时直接放弃该 victim 换新。每次触发器用完立即关闭 `rss_stat`，避免 rss 记录洪水把回收扫描拖到 20 秒级。
 - **cred**：`rb_node.parent_color = node 自身`（`RB_EMPTY_NODE`，保证 cleanup 只摘链一次），指针写把 `task->cred` 指向页内假 cred；`rb_erase` 的第二次写落在 `node+0x08`（uid/gid），用一次 tile 零写补齐；假 cred 子进程内 fork+exec 自检 `Uid=0` 且 `CapEff=0x1ffffffffff` 通过后直接执行一次 late-load。
@@ -216,7 +217,7 @@ cargo build --release --target aarch64-linux-android
 cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb110/t98260
 ```
 
-`t98260 run` / `run612.sh` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu` / `finasu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）与 `PYB110_SUSFS`（`1` / `0`）选择行为；两条都只走 `ksud late-load`。
+`t98260 run` / `run612.sh` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu` / `finasu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）与 `PYB110_SUSFS`（`1` / `0`）选择行为；测试钩子 `PYB110_FORCE_FAIL=cred` 强制失败；两条都只走 `ksud late-load`。
 
 ## 使用
 
