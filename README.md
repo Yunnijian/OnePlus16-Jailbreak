@@ -17,7 +17,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；管理器由用户安装，App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。按 98260 的逻辑重排为 **plant → rootd → ksud late-load → install → 管理器**：`t61269` 只负责 UAF 与 rootd，`t61269_su` 是 rootd 客户端，`run612.sh` 负责校验内核、调 ksud、安装与收尾；部署不带 ko/syms，ksud 运行时从已安装管理器 APK 的 `lib/arm64` 原地执行（SukiSU 为随机名，按大小 + `--version` 识别），不再拷贝、不再内置。已在 PLZ110（6.12.69）用 SukiSU 41100 真机跑通，连续复测命中率正常。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.56 已构建（6,635,682 B，md5 `65a53e89f3f8e59db8973d9a6cc2d104`）。
+- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.57 已构建（6,653,378 B，md5 `4ff84cbdd1f48d0a0a1eaec0fe092ec3`）。
 - **内置范围**：APK 只内置 6.18 单入口 `t98260`、6.12 的 `t61269/t61269_su/run612.sh` 和两个 SUSFS ko（`assets/pyb110` 约 9 MB，release APK 约 6.6 MB）；**不再内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
 ## 截图
@@ -49,13 +49,12 @@ OnePlus 16（PYB110）一键越狱工具。
 ┌───────────────────────────────────────────────┐
 │ /data/local/tmp/pyb110-<boot_id>-<epoch>/     │
 │  98260 6.18：t98260 (Rust 单入口)             │
-│   1 probe（内核指纹 / trace 通道）            │
-│   2 内部 C plant --auto：UAF / 自推 slide →   │
-│     假 cred → 子进程一次性 late-load          │
-│   3 PLANT_OK → fake-cred 子进程执行           │
-│     ksud late-load（只调一次，带 --kmi）       │
-│   4 等 KSU/su → ksud install / 加冕 / 收尾    │
-│   5 可选 SUSFS → 拉起管理器                   │
+│   1 C plant --auto 进程内 preflight           │
+│     （内核 release / trace 通道）             │
+│   2 UAF / 自推 slide → 假 cred → 子进程       │
+│     一次性 late-load（只调一次，带 --kmi）     │
+│   3 等 KSU / su → ksud install                │
+│   4 SUSFS / 截图恢复 / 管理器拉起 并行收尾     │
 │  98260 6.12：run612.sh + t61269（不变）       │
 │  两条都从已安装管理器 APK 原地执行 ksud；      │
 │  不再部署 ksu-base*.ko / syms / prep_* /      │
@@ -79,11 +78,12 @@ OnePlus 16（PYB110）一键越狱工具。
 - **泄漏与回收**：2048 个定时器，ftrace raw 管道逐字节扫描拿到 `k_itimer` 地址；`mm_page_alloc/free` 与 PFN 校验定位被释放的 order-1 slab 页，再用 8K AF_UNIX skb 回收。
 - **写入与提权**：伪造 `rb_node` 瓦片，借 `rb_erase` 完成零写/指针写；先以同一原语把 `selinux_state - 7` 写零进入 Permissive，再把假 cred 装进 `task->cred`。
 - **交接（无 rootd）**：假 cred 子进程直接 fork root shell 执行 `ksud late-load --kmi android17-6.18`，**只调一次，无重试、无 `--kmi` 兜底**（五家管理器 ksud 均已核对内嵌该 KMI）；子进程完成后 park 不退出。不再创建 socket、不再需要 KSU 后的退役连接，也不回退 `insmod`。
-- **slide 自推**：`t98260` 内部的 C plant 从 2048 条 `do_timer_create+0xb8` 的 `kmem_cache_alloc` 记录取众数 call_site，直接得到 KASLR slide；不再需要 `take_slide.sh`/`prep_solve`/`syms.txt`。
+- **并行收尾（v1.57）**：`--auto` 在 plant 进程内做内核/trace 预检，不再单独 fork `--probe`；`ksud install` 之后，SUSFS 装载、截图链路恢复、管理器拉起与 APK/FinaSU 收尾并行执行；SUSFS ko 由 App 在 plant 启动后以 `.tmp` + rename 原子落盘，Rust 最多等 5 s。`wait_su` 仍保持在模块 Live 之后，避免提前 su 与 late-load 抢时序。
+- **slide 自推**：`t98260` 内部的 C plant 从 2048 条 `do_timer_create+0xb8` 的 `kmem_cache_alloc` 记录取众数 call_site，直接得到 KASLR slide；不再需要 `take_slide.sh`/`prep_solve`/`syms.txt`。这里的“自推命中”指 slide 值一次推出且正确；后续 `SLIDE_TRY` 重试的是 SELinux 零写的页回收，不是重新推导 slide（重试期间 slide 值不变）。
 - **回收**：4096 个 socketpair 各持一个 8K skb（约 32 MB）抢 order-1 页；`mm_page_free` 最多等 1.2 s，每 400 ms 在 victim CPU（CPU1）上 churn 一轮 4096 个定时器（v1.24：churn 从 CPU0 改到 timer 实际创建/释放的 CPU，超时直接放弃该 victim 换新，不再空等 4 s）；每次触发器用完立即关闭 `rss_stat`，避免 rss 记录洪水把回收扫描拖到 20 秒级。
 - **cred**：`rb_node.parent_color = node 自身`（`RB_EMPTY_NODE`，保证 cleanup 只摘链一次），指针写把 `task->cred` 指向页内假 cred；`rb_erase` 的第二次写落在 `node+0x08`（uid/gid），用一次 tile 零写补齐；假 cred 子进程内 fork+exec 自检 `Uid=0` 且 `CapEff=0x1ffffffffff` 通过后直接执行一次 late-load。
 - **管理器拉起**：SukiSU 的 Launcher Activity 是混淆名，`am start -p` 解析不到、`monkey -p` 只起进程不保证置前；脚本改为 `cmd package resolve-activity` 取组件后 `am start -n`，App 在脚本结束且模块已加载时再用 `getLaunchIntentForPackage` 从前景兜底拉起。
-- **实测（2026-10-29，PYB110 干净 boot）**：`t98260_plant --auto` 到 `ROOTD_READY` **1.75 s**（SELinux 1 次命中 492 ms、cred 585 ms、+8 补写 560 ms）；`t98260 run` 全流程（probe → plant → late-load → ksud install → 管理器）**3.16 s**（旧版 `run98260.sh` 实测，Rust 入口复用同一 plant/rootd 路径）。用户 App 内实跑（SukiSU，v1.15）全流程 **<5 s**（用户口径，2026-10-29）；v1.16 把 plant 日志改为 `tee` 实时流式；v1.17 修复管理器自动拉起；v1.18 反 root 改为停 `riskdetect` HAL（不 disable/kill exsystemservice）；v1.19 free 等待 4 s→8 s；v1.20 运行时日志全英文；v1.21 改回 4 s 并加 slab churn（8 s 等待对“页未回 buddy”的 FREED=0 只会更慢）；v1.22 的 98260 部署去掉 `take_slide.sh`/`prep_solve`/`forker`（64560 仍用，98260 的 `SLIDE_MISSING` 兜底改为直接 `PATCH_FAIL`）。v1.21 用户干净 boot 复测：plant→rootd **2.66 s**（SELinux 786 ms、task 104 ms、cred 第一次 512 ms spray miss、第二次 712 ms 命中、+8 509 ms），两次 cred 均 `RECLAIM_FREED=1`、churn 未触发；`riskdetect=stopped` 保持 3 h+、KSU Live。v1.23 把官方 KernelSU 升到 `main`/UAPI6（LKM 按 `db6263d3` 自编 382,232 B、ksud 同源 6,618,008 B、管理器 32707 同签名可直接 `adb install -r` 覆盖）；其余三家管理器不变。v1.26 修复管理器被打开两次（`ksud late-load` 结束时已重启管理器，脚本在 late-load 成功时不再 `force-stop`+`am start`，只有 insmod 回退/已加载路径才由脚本拉起）；v1.24 改 98260 回收策略：`mm_page_free` 等待 4 s→1.2 s、churn 从 CPU0 改到 victim CPU1、trace 扫描命中即停，卡住的 slab 直接放弃换新 victim。v1.53 修复 6.18 路径上 `finish_manager` 的误判标记；v1.54 彻底删除 6.18 的 rootd（fake-cred 子进程直接执行 late-load）。v1.55 针对重启后首次 attempt 卡死/重启：late-load 重试前先等 `/proc/modules` 出现 `kernelsu`（最多 10 s），fake-cred 子进程执行完 late-load 后 park 而非退出，并移除 su 可用前的反 root 守卫（只保留 su 后的 `stop riskdetect`）。v1.56 按用户要求删除 late-load 的 `--kmi` 兜底重试，只发一次 `ksud late-load --kmi android17-6.18`，失败由 `wait_module` 报错。
+- **实测（2026-10-29，PYB110 干净 boot）**：`t98260_plant --auto` 到 `ROOTD_READY` **1.75 s**（SELinux 1 次命中 492 ms、cred 585 ms、+8 补写 560 ms）；`t98260 run` 全流程（probe → plant → late-load → ksud install → 管理器）**3.16 s**（旧版 `run98260.sh` 实测，Rust 入口复用同一 plant/rootd 路径）。用户 App 内实跑（SukiSU，v1.15）全流程 **<5 s**（用户口径，2026-10-29）；v1.16 把 plant 日志改为 `tee` 实时流式；v1.17 修复管理器自动拉起；v1.18 反 root 改为停 `riskdetect` HAL（不 disable/kill exsystemservice）；v1.19 free 等待 4 s→8 s；v1.20 运行时日志全英文；v1.21 改回 4 s 并加 slab churn（8 s 等待对“页未回 buddy”的 FREED=0 只会更慢）；v1.22 的 98260 部署去掉 `take_slide.sh`/`prep_solve`/`forker`（64560 仍用，98260 的 `SLIDE_MISSING` 兜底改为直接 `PATCH_FAIL`）。v1.21 用户干净 boot 复测：plant→rootd **2.66 s**（SELinux 786 ms、task 104 ms、cred 第一次 512 ms spray miss、第二次 712 ms 命中、+8 509 ms），两次 cred 均 `RECLAIM_FREED=1`、churn 未触发；`riskdetect=stopped` 保持 3 h+、KSU Live。v1.23 把官方 KernelSU 升到 `main`/UAPI6（LKM 按 `db6263d3` 自编 382,232 B、ksud 同源 6,618,008 B、管理器 32707 同签名可直接 `adb install -r` 覆盖）；其余三家管理器不变。v1.26 修复管理器被打开两次（`ksud late-load` 结束时已重启管理器，脚本在 late-load 成功时不再 `force-stop`+`am start`，只有 insmod 回退/已加载路径才由脚本拉起）；v1.24 改 98260 回收策略：`mm_page_free` 等待 4 s→1.2 s、churn 从 CPU0 改到 victim CPU1、trace 扫描命中即停，卡住的 slab 直接放弃换新 victim。v1.53 修复 6.18 路径上 `finish_manager` 的误判标记；v1.54 彻底删除 6.18 的 rootd（fake-cred 子进程直接执行 late-load）。v1.55 针对重启后首次 attempt 卡死/重启：late-load 重试前先等 `/proc/modules` 出现 `kernelsu`（最多 10 s），fake-cred 子进程执行完 late-load 后 park 而非退出，并移除 su 可用前的反 root 守卫（只保留 su 后的 `stop riskdetect`）。v1.56 按用户要求删除 late-load 的 `--kmi` 兜底重试，只发一次 `ksud late-load --kmi android17-6.18`，失败由 `wait_module` 报错。v1.57 做并行收尾：`--auto` 进程内 preflight 取代独立 probe；SUSFS、截图恢复、管理器拉起与剩余收尾并行；SUSFS ko 改为 plant 启动后原子落盘。
 
 **CVE-2026-98260-6.12（run612.sh + t61269，未改）**
 
