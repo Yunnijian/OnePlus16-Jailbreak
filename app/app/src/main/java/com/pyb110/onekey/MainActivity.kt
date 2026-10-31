@@ -4,12 +4,19 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +28,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,6 +44,8 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.RemoveModerator
 import androidx.compose.material.icons.filled.RestartAlt
@@ -66,8 +74,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlinx.coroutines.withContext
-import moe.shizuku.server.IShizukuService
 import rikka.shizuku.Shizuku
+import roro.stellar.Stellar
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -75,6 +83,8 @@ import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.NavigationBar
+import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -104,19 +114,32 @@ class MainActivity : ComponentActivity() {
     private var softRebootAfter by mutableStateOf(false)
     private var unloadGuard by mutableStateOf(false)
     private var susfsSupport by mutableStateOf(false)
-    private var showLogs by mutableStateOf(false)
+    private var tab by mutableStateOf(AppTab.HOME)
+    private var historyEntries by mutableStateOf(listOf<HistoryEntry>())
+    private var historyDetail by mutableStateOf<HistoryEntry?>(null)
+    private var historyDetailText by mutableStateOf("")
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { code, result ->
-        if (code == REQ_SHIZUKU) {
-            authorized = result == PackageManager.PERMISSION_GRANTED
-            addLog(if (authorized) "Shizuku authorized" else "Shizuku permission denied")
-            if (authorized) refreshKsuAsync()
-        }
+        if (code == REQ_SHIZUKU) onPermissionResult(result == PackageManager.PERMISSION_GRANTED)
+    }
+    private val stellarPermissionListener = Stellar.OnRequestPermissionResultListener { code, allowed, _ ->
+        if (code == REQ_SHIZUKU) onPermissionResult(allowed)
     }
     private val binderListener = Shizuku.OnBinderReceivedListener {
-        binderReady = Shizuku.pingBinder()
+        binderReady = PrivService.pick() != null
         refreshAuth()
         refreshKsuAsync()
+    }
+    private val stellarBinderListener = Stellar.OnBinderReceivedListener {
+        binderReady = PrivService.pick() != null
+        refreshAuth()
+        refreshKsuAsync()
+    }
+
+    private fun onPermissionResult(ok: Boolean) {
+        authorized = ok
+        addLog(if (ok) "${PrivService.pick()?.label ?: "Backend"} authorized" else "permission denied")
+        if (ok) refreshKsuAsync()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -134,7 +157,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Shizuku.addRequestPermissionResultListener(permissionListener)
         Shizuku.addBinderReceivedListenerSticky(binderListener)
-        binderReady = Shizuku.pingBinder()
+        Stellar.addRequestPermissionResultListener(stellarPermissionListener)
+        Stellar.addBinderReceivedListenerSticky(stellarBinderListener)
+        binderReady = PrivService.pick() != null
         refreshAuth()
         antiRootGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("antiroot_guard", true)
         softRebootAfter = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("soft_reboot_after", false)
@@ -152,8 +177,21 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeController = remember { ThemeController(colorSchemeMode = ColorSchemeMode.System) }
             MiuixTheme(themeController) {
-                if (showLogs) {
-                    LogScreen(state = logs.toList(), onBack = { showLogs = false })
+                Column(modifier = Modifier.fillMaxSize()) {
+                    AnimatedContent(
+                        targetState = tab,
+                        transitionSpec = {
+                            val dir = if (targetState.ordinal >= initialState.ordinal) 1 else -1
+                            (slideInHorizontally(tween(240)) { it / 4 * dir } + fadeIn(tween(240))) togetherWith
+                                (slideOutHorizontally(tween(240)) { -it / 4 * dir } + fadeOut(tween(240)))
+                        },
+                        label = "tab",
+                        modifier = Modifier.weight(1f)
+                    ) { t ->
+                if (t == AppTab.LOGS) {
+                    LogScreen(state = logs.toList())
+                } else if (t == AppTab.HISTORY) {
+                    HistoryScreen()
                 } else {
                     val scrollBehavior = MiuixScrollBehavior()
                     Scaffold(
@@ -161,16 +199,7 @@ class MainActivity : ComponentActivity() {
                         topBar = {
                             TopAppBar(
                                 title = "Shark",
-                                scrollBehavior = scrollBehavior,
-                                navigationIcon = {
-                                    IconButton(onClick = { showLogs = true }) {
-                                        Icon(
-                                            imageVector = MiuixIcons.Notes,
-                                            contentDescription = "日志",
-                                            tint = MiuixTheme.colorScheme.onBackground
-                                        )
-                                    }
-                                }
+                                scrollBehavior = scrollBehavior
                             )
                         }
                     ) { inner ->
@@ -190,7 +219,7 @@ class MainActivity : ComponentActivity() {
                                 TextButton(
                                     text = when {
                                         busy -> "运行中…"
-                                        !binderReady -> "Shizuku 未运行（点击打开）"
+                                        !binderReady -> "Stellar/Shizuku 未运行（点击打开）"
                                         !authorized -> "授权 Shizuku"
                                         ksuActive -> "校验 / 再次越狱"
                                         else -> "一键越狱"
@@ -199,10 +228,10 @@ class MainActivity : ComponentActivity() {
                                         if (busy) return@TextButton
                                         when {
                                             !binderReady -> {
-                                                addLog("Start Shizuku (wireless debugging) first")
-                                                openShizuku()
+                                                addLog("Start Stellar or Shizuku first")
+                                                PrivService.openManager(applicationContext)
                                             }
-                                            !authorized -> Shizuku.requestPermission(REQ_SHIZUKU)
+                                            !authorized -> PrivService.request(REQ_SHIZUKU)
                                             else -> runFlow()
                                         }
                                     },
@@ -313,12 +342,16 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                    }
+                    BottomBar(selected = tab, onSelect = { tab = it })
+                }
             }
         }
     }
 
     @Composable
     private fun StatusCard(granted: Boolean) {
+        val backendName = PrivService.pick()?.label ?: "Stellar"
         val green = if (isSystemInDarkTheme()) Color(0xFF1A3825) else Color(0xFFDFFAE4)
         val greenTint = Color(0xFF36D167)
         Card(
@@ -353,13 +386,13 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Column {
                         Text(
-                            text = if (granted) "Shizuku 已授权" else "Shizuku 未授权",
+                            text = if (granted) "$backendName 已授权" else "$backendName 未授权",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = if (granted) "已连接到 Shizuku，可尝试越狱" else "未连接到 Shizuku，请授予权限",
+                            text = if (granted) "已连接到 $backendName，可尝试越狱" else "未连接到 $backendName，请授予权限",
                             fontSize = 15.sp
                         )
                     }
@@ -425,13 +458,10 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun LogScreen(state: List<String>, onBack: () -> Unit) {
+    private fun LogScreen(state: List<String>) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = "日志",
-                    actions = { TextButton(text = "返回", onClick = onBack) }
-                )
+                TopAppBar(title = "日志")
             },
             popupHost = { }
         ) { inner ->
@@ -463,27 +493,190 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Composable
+    private fun BottomBar(selected: AppTab, onSelect: (AppTab) -> Unit) {
+        NavigationBar {
+            AppTab.entries.forEach { t ->
+                NavigationBarItem(
+                    selected = t == selected,
+                    onClick = { onSelect(t) },
+                    icon = t.icon,
+                    label = t.label
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun HistoryScreen() {
+        AnimatedContent(
+            targetState = historyDetail != null,
+            transitionSpec = {
+                val dir = if (targetState) 1 else -1
+                (slideInHorizontally(tween(240)) { it / 3 * dir } + fadeIn(tween(240))) togetherWith
+                    (slideOutHorizontally(tween(240)) { -it / 3 * dir } + fadeOut(tween(240)))
+            },
+            label = "history"
+        ) { showDetail ->
+        val detail = historyDetail
+        if (showDetail && detail != null) {
+            HistoryDetail(
+                entry = detail,
+                text = historyDetailText,
+                onBack = { historyDetail = null },
+                onDelete = {
+                    val name = detail.fileName
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        HistoryStore.delete(applicationContext, name)
+                        withContext(Dispatchers.Main) {
+                            historyDetail = null
+                            refreshHistory()
+                        }
+                    }
+                }
+            )
+        } else {
+            LaunchedEffect(Unit) { refreshHistory() }
+            Scaffold(
+                topBar = {
+                    TopAppBar(title = "历史")
+                },
+                popupHost = { }
+            ) { inner ->
+                val entries = historyEntries
+                if (entries.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(inner),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "暂无记录",
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(inner),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(entries) { e ->
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            val name = e.fileName
+                                            lifecycleScope.launch(Dispatchers.IO) {
+                                                val text = HistoryStore.read(applicationContext, name)
+                                                withContext(Dispatchers.Main) {
+                                                    historyDetailText = text
+                                                    historyDetail = e
+                                                }
+                                            }
+                                        }
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${e.startTime}  ${e.manager} · ${e.exploit.substringAfterLast('-')}",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MiuixTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = historyValue(e),
+                                        fontSize = 13.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        }
+    }
+
+    private fun historyValue(e: HistoryEntry): String {
+        val dur = e.durationMs?.let { String.format(java.util.Locale.US, "%.1fs", it / 1000.0) }
+        return when {
+            e.result == "SUCCESS" && dur != null -> "成功 $dur"
+            e.result == "SUCCESS" -> "成功"
+            e.result == "FAIL" && dur != null -> "失败 $dur"
+            e.result == "FAIL" -> "失败"
+            else -> "进行中"
+        }
+    }
+
+    @Composable
+    private fun HistoryDetail(entry: HistoryEntry, text: String, onBack: () -> Unit, onDelete: () -> Unit) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = entry.startTime,
+                    actions = {
+                        TextButton(text = "删除", onClick = onDelete)
+                        TextButton(text = "返回", onClick = onBack)
+                    }
+                )
+            },
+            popupHost = { }
+        ) { inner ->
+            if (text.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(inner),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "暂无日志",
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+            } else {
+                val lines = remember(text) { text.lines() }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(inner),
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    items(lines) { line -> Text(line, fontSize = 11.sp) }
+                }
+            }
+        }
+    }
+
 
     private fun addLog(line: String) {
         Log.i("PYB110", line)
+        val stamped = "${timeFmt.format(java.util.Date())}  $line"
+        HistoryStore.append(stamped)
         runOnUiThread {
-            logs.add("${timeFmt.format(java.util.Date())}  $line")
+            logs.add(stamped)
             if (logs.size > 4000) logs.removeRange(0, logs.size - 4000)
         }
     }
 
+    private fun refreshHistory() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val entries = HistoryStore.list(applicationContext)
+            withContext(Dispatchers.Main) { historyEntries = entries }
+        }
+    }
+
     private fun refreshAuth() {
-        authorized = Shizuku.pingBinder() &&
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        authorized = PrivService.granted()
     }
 
     private fun refreshKsuAsync() {
-        if (!Shizuku.pingBinder()) return
+        if (PrivService.pick() == null) return
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val binder = Shizuku.getBinder() ?: return@launch
-                val service = IShizukuService.Stub.asInterface(binder) ?: return@launch
-                val (active, se) = readDeviceState(service)
+                val (active, se) = readDeviceState()
                 withContext(Dispatchers.Main) {
                     ksuActive = active
                     selinuxText = se
@@ -494,12 +687,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun readDeviceState(service: IShizukuService): Pair<Boolean, String> {
-        val p = service.newProcess(
+    private fun readDeviceState(): Pair<Boolean, String> {
+        val p = PrivService.newProcess(
             arrayOf("sh", "-c", "if grep -qi kernelsu /proc/modules; then echo YES; elif timeout 3 su -c id 2>/dev/null | grep -q uid=0; then echo YES; else echo NO; fi; getenforce"),
             shizukuEnv(), "/data/local/tmp"
         )
-        val lines = ParcelFileDescriptor.AutoCloseInputStream(p.getInputStream())
+        val lines = p.getInputStream()
             .bufferedReader().readLines()
         p.waitFor()
         val active = lines.getOrNull(0)?.trim() == "YES"
@@ -602,11 +795,6 @@ class MainActivity : ComponentActivity() {
         else -> "未知"
     }
 
-    private fun openShizuku() {
-        val intent = packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-        if (intent != null) startActivity(intent) else addLog("Shizuku app not found")
-    }
-
     private fun shizukuEnv(): Array<String> = arrayOf(
         "PATH=/system/bin:/system/xbin:/data/adb/ksu/bin",
         "HOME=/data/local/tmp",
@@ -627,19 +815,17 @@ class MainActivity : ComponentActivity() {
     private fun runFlow() {
         busy = true
         val softReboot = softRebootAfter
+        val startedAt = System.currentTimeMillis()
+        HistoryStore.start(applicationContext, manager.fullLabel, exploit.fullLabel, kernelVersion, deviceModel)
         lifecycleScope.launch(Dispatchers.IO) {
+            var success = false
+            var exit = -1
             try {
-                val binder = Shizuku.getBinder()
-                if (binder == null) {
-                    addLog("Shizuku binder is null")
+                if (PrivService.pick() == null) {
+                    addLog("No privileged backend (Stellar/Shizuku) running")
                     return@launch
                 }
-                val service = IShizukuService.Stub.asInterface(binder)
-                if (service == null) {
-                    addLog("Shizuku service is null")
-                    return@launch
-                }
-                val ksudPreflight = service.newProcess(
+                val ksudPreflight = PrivService.newProcess(
                     arrayOf("sh", "-c",
                         "[ -n \"$(pm path '${manager.pkg}' 2>/dev/null)\" ] || [ -x /data/adb/ksu/bin/ksud ] || [ -x /data/adb/ksud ]"),
                     shizukuEnv(), "/data/local/tmp"
@@ -648,17 +834,19 @@ class MainActivity : ComponentActivity() {
                     addLog("Manager not installed: ${manager.pkg}. Install the manager APK first; ksud is executed from its APK, no bundled copy.")
                     return@launch
                 }
-                val dir = deployDir(service)
+                val dir = deployDir()
                 addLog("Deploying tools to $dir ...")
-                stageAssets(service, dir, deployPlan())
+                stageAssets(dir, deployPlan())
                 addLog("Starting ${exploit.fullLabel}")
                 val cmd = when (exploit) {
                     ExploitKind.CVE98260 -> arrayOf("$dir/t98260", "run")
                     ExploitKind.CVE61269 -> arrayOf("sh", "$dir/run612.sh")
                 }
-                val rc = runStreaming(service, cmd, dir)
+                val rc = runStreaming(cmd, dir)
+                exit = rc
                 addLog("exploit exit=$rc")
-                val (active, se) = readDeviceState(service)
+                val (active, se) = readDeviceState()
+                success = rc == 0 && active
                 withContext(Dispatchers.Main) {
                     ksuActive = active
                     selinuxText = se
@@ -670,7 +858,7 @@ class MainActivity : ComponentActivity() {
                 if (softReboot && rc == 0 && active) {
                     addLog("Jailbreak complete; restarting zygote")
                     val rebootRc = runCatching {
-                        service.newProcess(
+                        PrivService.newProcess(
                             arrayOf("su", "-c", "setprop ctl.restart zygote"),
                             shizukuEnv(), "/data/local/tmp"
                         ).waitFor()
@@ -680,6 +868,7 @@ class MainActivity : ComponentActivity() {
             } catch (t: Throwable) {
                 addLog("ERROR: $t")
             } finally {
+                HistoryStore.finish(success, exit, System.currentTimeMillis() - startedAt)
                 withContext(Dispatchers.Main) { busy = false }
             }
         }
@@ -702,13 +891,13 @@ class MainActivity : ComponentActivity() {
         return common.map { it to it } + extra
     }
 
-    private fun deployDir(service: IShizukuService): String {
+    private fun deployDir(): String {
         val id = try {
-            val p = service.newProcess(
+            val p = PrivService.newProcess(
                 arrayOf("cat", "/proc/sys/kernel/random/boot_id"),
                 shizukuEnv(), "/data/local/tmp"
             )
-            val text = ParcelFileDescriptor.AutoCloseInputStream(p.getInputStream())
+            val text = p.getInputStream()
                 .bufferedReader().readText().trim()
             p.waitFor()
             text.replace("-", "").take(12)
@@ -719,15 +908,15 @@ class MainActivity : ComponentActivity() {
         return "/data/local/tmp/pyb110-$tag-${System.currentTimeMillis() / 1000}"
     }
 
-    private fun stageAssets(service: IShizukuService, dir: String, files: List<Pair<String, String>>) {
+    private fun stageAssets(dir: String, files: List<Pair<String, String>>) {
         val stale = "killall -9 t64560_loader2 t64560_w2 t64560_v36 brm_plant 2>/dev/null"
         runCatching {
-            service.newProcess(
+            PrivService.newProcess(
                 arrayOf("sh", "-c", stale),
                 shizukuEnv(), "/data/local/tmp"
             ).waitFor()
         }
-        val mk = service.newProcess(
+        val mk = PrivService.newProcess(
             arrayOf("sh", "-c", "mkdir -p '$dir' && touch '$dir/.probe' && rm '$dir/.probe'"),
             shizukuEnv(), "/data/local/tmp"
         ).waitFor()
@@ -737,13 +926,13 @@ class MainActivity : ComponentActivity() {
         }
 
         for ((assetName, target) in files) {
-            val p = service.newProcess(
+            val p = PrivService.newProcess(
                 arrayOf("sh", "-c", "cat > '$dir/$target'"),
                 shizukuEnv(), "/data/local/tmp"
             )
             var copied = 0L
             try {
-                ParcelFileDescriptor.AutoCloseOutputStream(p.getOutputStream()).use { out ->
+                p.getOutputStream().use { out ->
                     assets.open("pyb110/$assetName").use { copied = it.copyTo(out) }
                 }
             } catch (t: java.io.IOException) {
@@ -754,21 +943,21 @@ class MainActivity : ComponentActivity() {
             if (rc != 0) addLog("Deploy failed $target rc=$rc") else addLog("Deployed $target (${copied} B)")
         }
 
-        service.newProcess(
+        PrivService.newProcess(
             arrayOf("sh", "-c", "chmod 755 " + files.joinToString(" ") { "'$dir/${it.second}'" }),
             shizukuEnv(), "/data/local/tmp"
         ).waitFor()
     }
 
-    private fun runStreaming(service: IShizukuService, cmd: Array<String>, dir: String): Int {
+    private fun runStreaming(cmd: Array<String>, dir: String): Int {
         val env = shizukuEnv() + "PYB110_DIR=$dir" + "PYB110_MANAGER=${manager.manager}" +
             "PYB110_LATE_LOAD=1" +
             "PYB110_UNLOAD_GUARD=${if (unloadGuard) "1" else "0"}" +
             "PYB110_DISABLE_ANTIROOT=${if (antiRootGuard) "1" else "0"}" +
             "PYB110_SUSFS=${if (susfsSupport) "1" else "0"}"
-        val p = service.newProcess(cmd, env, dir)
-        val out = ParcelFileDescriptor.AutoCloseInputStream(p.getInputStream())
-        val err = ParcelFileDescriptor.AutoCloseInputStream(p.getErrorStream())
+        val p = PrivService.newProcess(cmd, env, dir)
+        val out = p.getInputStream()
+        val err = p.getErrorStream()
         val t1 = Thread {
             try {
                 out.bufferedReader().forEachLine { addLog(it) }
@@ -794,7 +983,15 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         Shizuku.removeRequestPermissionResultListener(permissionListener)
         Shizuku.removeBinderReceivedListener(binderListener)
+        Stellar.removeRequestPermissionResultListener(stellarPermissionListener)
+        Stellar.removeBinderReceivedListener(stellarBinderListener)
         super.onDestroy()
+    }
+
+    private enum class AppTab(val label: String, val icon: ImageVector) {
+        HOME("首页", Icons.Filled.Home),
+        LOGS("日志", MiuixIcons.Notes),
+        HISTORY("历史", Icons.Filled.History)
     }
 
     private enum class ExploitKind(val fullLabel: String) {

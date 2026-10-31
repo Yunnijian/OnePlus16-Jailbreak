@@ -4,6 +4,7 @@
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <queries>
+        <package android:name="roro.stellar.manager" />
         <package android:name="me.weishu.kernelsu" />
         <package android:name="me.yuki.fina" />
         <package android:name="com.rifsxd.ksunext" />
@@ -28,6 +29,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name="roro.stellar.StellarProvider"
+            android:authorities="${applicationId}.stellar"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <meta-data
+            android:name="roro.stellar.permissions"
+            android:value="stellar" />
 
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

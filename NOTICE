@@ -71,3 +71,10 @@ The application icon is drawn by this project.
          assets/pyb110/t61269 for the experimental 6.12.69-ex option.
          Redistribution is NOT cleared by the upstream author; treat this
          binary as a local research build until a license/permission exists.
+
+12. Stellar (Shizuku fork) / Stellar API SDK
+   Source: https://github.com/roro2239/Stellar (manager),
+           https://github.com/roro2239/Stellar-API (SDK, JitPack com.github.roro2239:Stellar-API:1.0.3)
+   License: MPL-2.0 (Stellar modifications) / Apache-2.0 (Shizuku base code).
+   Used: privileged backend preferred at runtime (StellarProvider + roro.stellar API);
+         Shizuku (entry 8) remains the fallback backend.

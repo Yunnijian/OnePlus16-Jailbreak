@@ -23,8 +23,8 @@ android {
         applicationId = "com.pyb110.onekey"
         minSdk = 31
         targetSdk = 37
-        versionCode = 51
-        versionName = "1.61"
+        versionCode = 55
+        versionName = "1.65"
     }
     buildFeatures {
         compose = true
@@ -69,4 +69,5 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:aidl:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    implementation("com.github.roro2239:Stellar-API:1.0.3")
 }

@@ -4,7 +4,7 @@ OnePlus 16（PYB110）一键越狱工具。
 
 在 **OnePlus 16（PYB110，SM8950，Android 17 / ColorOS，内核 `6.18.21-android17-5-gf957accaf563-ab15926176-4k`）** 上，通过 **CVE-2026-98260-6.18** / **CVE-2026-98260-6.12** 提权，并加载 **内核态 root（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）** 的一键工具与源码。
 
-设备未解锁 BL，起手只有 adb shell（uid 2000）。工具通过 Shizuku 以 shell 身份驱动设备端 exploit，最终加载按本机 GKI 6.18.21 自编的 LKM：6.18 与 6.12 两条 98260 分支都走 `ksud late-load`，不再内置 KernelSU LKM、不再使用 `insmod` 回退。
+设备未解锁 BL，起手只有 adb shell（uid 2000）。工具通过 Stellar（默认）或 Shizuku 以 shell 身份驱动设备端 exploit，最终加载按本机 GKI 6.18.21 自编的 LKM：6.18 与 6.12 两条 98260 分支都走 `ksud late-load`，不再内置 KernelSU LKM、不再使用 `insmod` 回退。
 
 > 仅用于自有设备的系统研究。存在竞态与重启风险，详见「风险」一节。
 
@@ -17,7 +17,8 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；管理器由用户安装，App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（新分支，实验）**：接入按本仓库提速方法改造的 `YuKongA/CVE-2026-98260`（目标 6.12.69 / PLZ110）。按 98260 的逻辑重排为 **plant → rootd → ksud late-load → install → 管理器**：`t61269` 只负责 UAF 与 rootd，`t61269_su` 是 rootd 客户端，`run612.sh` 负责校验内核、调 ksud、安装与收尾；部署不带 ko/syms，ksud 运行时从已安装管理器 APK 的 `lib/arm64` 原地执行（SukiSU 为随机名，按大小 + `--version` 识别），不再拷贝、不再内置。已在 PLZ110（6.12.69）用 SukiSU 41100 真机跑通，连续复测命中率正常。
-- App 为单页设置：ROOT 管理器与漏洞利用方式各一个下拉，另有四个流程开关；release 签名 APK v1.61 已构建（6,636,990 B，md5 `6758fa086f3f6c91bbe9e725cbd420d8`）。
+- App 为底部三 tab（首页/日志/历史，Miuix `NavigationBar` 组件）：首页是分组设置（ROOT 管理器与漏洞利用方式各一个下拉 + 四个流程开关），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除）；release 签名 APK v1.65 已构建（6,784,550 B，md5 `b57d2894b74587239748a2a87b791be8`）。
+- **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
 - **内置范围**：APK 只内置 6.18 单入口 `t98260`、6.12 的 `t61269/t61269_su/run612.sh` 和两个 SUSFS ko（`assets/pyb110` 约 9 MB，release APK 约 6.6 MB）；**不再内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
 ## 截图
@@ -109,7 +110,8 @@ OnePlus 16（PYB110）一键越狱工具。
 OnePlus16-Jailbreak/
 ├── app/                         Android App（Gradle 工程根）
 │   ├── app/                     :app 模块（Kotlin/Compose/Miuix/Shizuku）
-│   │   ├── src/main/java/com/pyb110/onekey/MainActivity.kt  单页设置与流程调度
+│   │   ├── src/main/java/com/pyb110/onekey/MainActivity.kt  三 tab（首页/日志/历史）与流程调度
+│   │   ├── src/main/java/com/pyb110/onekey/HistoryStore.kt  历史日志落盘（每次运行一个文件）
 │   │   ├── src/main/assets/pyb110/  t98260/t61269 + SUSFS ko
 │   │   ├── src/main/res/        自绘图标与资源
 │   │   ├── build.gradle.kts     签名配置 + R8
@@ -237,7 +239,7 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb
 - **98260 只适配 6.18.21**：`t98260 run` 会先 probe 完整内核 release 与 trace 通道，不匹配直接退出；依赖 `/sys/kernel/tracing`，建议干净开机后执行。
 - **98260 的假 cred 只替换 `task->cred`**：plant 进程内 `/proc/self/status` 的 `CapEff` 读的是 `real_cred`，显示 0 属正常；以 `su` 子进程为准。
 - **6.18 已删除 rootd**：fake-cred 子进程执行完 late-load 后原地 park（v1.55 起不再退出，避免持有假 cred 的进程消失后内核态模块初始化被打断），父进程同样 park 持页；没有 socket、没有退役连接、没有 0666 暴露。6.12 分支仍使用 `t61269` 自带的 rootd，未改。
-- App 依赖 Shizuku 服务；重启后需重新启动 Shizuku。
+- App 依赖 Stellar（默认）或 Shizuku 服务；重启后需重新启动对应服务。
 - 反 root 开关关闭时，加载后可能触发 ColorOS 安全弹窗并在 15 秒后重启。
 
 ## 风险
