@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
@@ -62,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlinx.coroutines.withContext
@@ -465,6 +465,7 @@ class MainActivity : ComponentActivity() {
 
 
     private fun addLog(line: String) {
+        Log.i("PYB110", line)
         runOnUiThread {
             logs.add("${timeFmt.format(java.util.Date())}  $line")
             if (logs.size > 4000) logs.removeRange(0, logs.size - 4000)
@@ -649,24 +650,13 @@ class MainActivity : ComponentActivity() {
                 }
                 val dir = deployDir(service)
                 addLog("Deploying tools to $dir ...")
-                val plan = deployPlan()
-                val lateAssets = if (exploit == ExploitKind.CVE98260) {
-                    plan.filter { it.first.startsWith("susfs_") }
-                } else {
-                    emptyList()
-                }
-                stageAssets(service, dir, plan - lateAssets.toSet())
+                stageAssets(service, dir, deployPlan())
                 addLog("Starting ${exploit.fullLabel}")
                 val cmd = when (exploit) {
                     ExploitKind.CVE98260 -> arrayOf("$dir/t98260", "run")
                     ExploitKind.CVE61269 -> arrayOf("sh", "$dir/run612.sh")
                 }
-                val running = async(Dispatchers.IO) { runStreaming(service, cmd, dir) }
-                if (lateAssets.isNotEmpty()) {
-                    runCatching { stageAssets(service, dir, lateAssets, atomic = true) }
-                        .onFailure { addLog("Late asset deploy failed: ${it.message}") }
-                }
-                val rc = running.await()
+                val rc = runStreaming(service, cmd, dir)
                 addLog("exploit exit=$rc")
                 val (active, se) = readDeviceState(service)
                 withContext(Dispatchers.Main) {
@@ -729,12 +719,7 @@ class MainActivity : ComponentActivity() {
         return "/data/local/tmp/pyb110-$tag-${System.currentTimeMillis() / 1000}"
     }
 
-    private fun stageAssets(
-        service: IShizukuService,
-        dir: String,
-        files: List<Pair<String, String>>,
-        atomic: Boolean = false
-    ) {
+    private fun stageAssets(service: IShizukuService, dir: String, files: List<Pair<String, String>>) {
         val stale = "killall -9 t64560_loader2 t64560_w2 t64560_v36 brm_plant 2>/dev/null"
         runCatching {
             service.newProcess(
@@ -752,9 +737,8 @@ class MainActivity : ComponentActivity() {
         }
 
         for ((assetName, target) in files) {
-            val writeTo = if (atomic) "$target.tmp" else target
             val p = service.newProcess(
-                arrayOf("sh", "-c", "cat > '$dir/$writeTo'"),
+                arrayOf("sh", "-c", "cat > '$dir/$target'"),
                 shizukuEnv(), "/data/local/tmp"
             )
             var copied = 0L
@@ -763,25 +747,11 @@ class MainActivity : ComponentActivity() {
                     assets.open("pyb110/$assetName").use { copied = it.copyTo(out) }
                 }
             } catch (t: java.io.IOException) {
-                addLog("Failed to write $writeTo (dir/file permission?): ${t.message}")
+                addLog("Failed to write $target (dir/file permission?): ${t.message}")
                 throw t
             }
             val rc = p.waitFor()
-            if (rc != 0) {
-                addLog("Deploy failed $writeTo rc=$rc")
-                continue
-            }
-            if (atomic) {
-                val mv = service.newProcess(
-                    arrayOf("sh", "-c", "mv -f '$dir/$writeTo' '$dir/$target'"),
-                    shizukuEnv(), "/data/local/tmp"
-                ).waitFor()
-                if (mv != 0) {
-                    addLog("Deploy rename failed $target rc=$mv")
-                    continue
-                }
-            }
-            addLog("Deployed $target (${copied} B)")
+            if (rc != 0) addLog("Deploy failed $target rc=$rc") else addLog("Deployed $target (${copied} B)")
         }
 
         service.newProcess(
