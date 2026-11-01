@@ -8,7 +8,7 @@
 - KDIR：`gki_defconfig` + `modules_prepare` + `security/selinux/built-in.a`
 - DDK：`ghcr.io/ylarod/ddk-min:android17-6.18-20260828`（clang r584948c）
 
-六个脚本都假定在 DDK 容器内、KMI 源与 KDIR 已挂载：
+七个脚本都假定在 DDK 容器内、KMI 源与 KDIR 已挂载：
 
 ```bash
 docker run --rm \
@@ -33,6 +33,7 @@ docker run --rm \
 | `build-sukisu.sh` | SukiSU Ultra v4.3.0 `e67b14e6`（41100） | 545,040 B |
 | `build-finasu.sh` | FinaSU master `9b32bde4`（v1.3.2 / 33090） | 496,744 B |
 | `build-susfs.sh` | SUSFS guard LKM（vendored） | 3,456,440 B（未 strip） |
+| `build-hybridmount.sh` | Hybrid Mount VFS provider（vendored） | 390,952 B |
 
 vermagic 均为 `6.18.21-4k SMP preempt mod_unload modversions aarch64`。
 
@@ -54,6 +55,24 @@ ksud insmod susfs_guard_lkm-6.18.21.ko expose_proc=1
 **已验证**：版本 `v2.3.0`、supercall、hide_syms、sus_map 的 maps/smaps 行隐藏、sus_path、kstat、open_redirect、hide_modules、uname、opath、日志开关；规则矩阵与工具在 [susfs-tools](susfs-tools/)。
 
 **已知边界**：`sus_map` 只对 `susfs_is_current_proc_umounted_app()` 为真的 app 生效；`su` 授予 root 的进程不隐藏。`hide_mounts` 的任意 bind mount 不会被标记（`recorded=0`），实际挂载隐藏未验证。`hide_modules` 的 `/sys/module/<name>` 对 root 也会隐藏（SukiSU 的 `u:r:ksu:s0` 未被识别为 `su_ctx`）。
+
+## Hybrid Mount VFS provider
+
+源码 vendored 在 [hybridmount](hybridmount/)（upstream `Hybrid-Mount/meta-hybrid_mount`，GPL-2.0，基线见 [PROVENANCE](hybridmount/PROVENANCE)）。
+上游的 `src/vfs/lkm_target.rs` 矩阵不含 6.18，这里直接对 6.18.21 GKI 编译：
+
+```bash
+docker run --rm \
+  -v <repo>/lkm/hybridmount:/work/hybridmount \
+  -v <repo>/lkm/build-hybridmount.sh:/work/build-hybridmount.sh:ro \
+  -v <kdir>:/work/kdir \
+  -v <out>:/out \
+  -e KDIR=/work/kdir/android17-6.18 \
+  ghcr.io/ylarod/ddk-min:android17-6.18-20260828 \
+  bash /work/build-hybridmount.sh
+```
+
+加载后 `/sys/module/hybridmount` 出现，metamodule 的 `vfs-doctor` 报 provider `hm`、`responds=true`。KERNEL_SECURITY_CHECK 会记录 `ko:[hybridmount.ko] hash not found`（只记录，不拦截）。
 
 ## 注意
 

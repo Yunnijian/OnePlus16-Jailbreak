@@ -53,6 +53,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Extension
@@ -151,6 +152,7 @@ class MainActivity : ComponentActivity() {
     private var softRebootAfter by mutableStateOf(false)
     private var unloadGuard by mutableStateOf(false)
     private var susfsSupport by mutableStateOf(false)
+    private var vfsSupport by mutableStateOf(false)
     private var tab by mutableStateOf(AppTab.HOME)
     private var showManual by mutableStateOf(false)
     private var showExtras by mutableStateOf(false)
@@ -204,6 +206,7 @@ class MainActivity : ComponentActivity() {
         softRebootAfter = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("soft_reboot_after", false)
         unloadGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("unload_guard", false)
         susfsSupport = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("susfs_support", false)
+        vfsSupport = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("vfs_support", false)
         val savedManager = getSharedPreferences("pyb110", MODE_PRIVATE).getString("manager", null)
         manager = runCatching { ManagerKind.valueOf(savedManager ?: "") }.getOrDefault(ManagerKind.KERNELSU)
         kernelVersion = runCatching { android.system.Os.uname().release }.getOrDefault("未知")
@@ -426,7 +429,7 @@ class MainActivity : ComponentActivity() {
                 "1. 先安装所选 ROOT 管理器（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）。",
                 "2. 启动 Stellar（推荐）或 Shizuku 服务，并在 Shark 里完成授权。",
                 "3. 回到首页点「一键越狱」，等待日志出现 DONE。",
-                "4. 成功后管理器会自动拉起；开启对应开关时还会停用安全弹窗、加载 SUSFS。"
+                "4. 成功后管理器会自动拉起；开启对应开关时还会停用安全弹窗、加载 SUSFS / VFS。"
             )
         ),
         ManualPage(
@@ -440,7 +443,7 @@ class MainActivity : ComponentActivity() {
         ManualPage(
             "一键越狱流程",
             listOf(
-                "preflight（内核 release / trace 通道）→ 98260 UAF（fake cred / SELinux 零写）→ cred 子进程一次性 ksud late-load → 等模块与 su → 收尾（ksud install、卸内核防护、SUSFS、截图恢复、拉起管理器）。",
+                "preflight（内核 release / trace 通道）→ 98260 UAF（fake cred / SELinux 零写）→ cred 子进程一次性 ksud late-load → 等模块与 su → 收尾（ksud install、卸内核防护、SUSFS、VFS、截图恢复、拉起管理器）。",
                 "快路径 plant 约 2–3 秒、全流程约 4–9 秒；回收未命中时会多花几秒，属正常波动。",
                 "失败后不必立刻重启：喷发页会交给 holder 并退出，同一 boot 可直接再点一次；SELinux 会在下次成功后由 KSU 恢复 Enforcing。"
             )
@@ -468,7 +471,7 @@ class MainActivity : ComponentActivity() {
             "运行方式",
             listOf(
                 "6.18.21 → CVE-2026-98260-6.18（t98260）；6.12.69 → CVE-2026-98260-6.12（t61269），按 uname 自动选择。",
-                "两种链路都是 Rust 单入口 + C 核心，ksud 从管理器 APK 原地执行；SUSFS 需在设置里开启并随包提供对应 ko。",
+                "两种链路都是 Rust 单入口 + C 核心，ksud 从管理器 APK 原地执行；SUSFS 需在设置里开启并随包提供对应 ko；VFS（hybridmount）目前只内置 6.18 的 ko。",
                 "仅用于自有设备的系统研究。"
             )
         )
@@ -565,6 +568,20 @@ class MainActivity : ComponentActivity() {
                                     startAction = {
                                         Icon(
                                             imageVector = Icons.Filled.Extension,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                SwitchPreference(
+                                    title = "VFS 支持",
+                                    checked = vfsSupport,
+                                    onCheckedChange = { updateVfsSupport(it) },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.AccountTree,
                                             contentDescription = null,
                                             modifier = Modifier.padding(end = 6.dp),
                                             tint = COUITheme.colorScheme.onBackground
@@ -1273,6 +1290,12 @@ class MainActivity : ComponentActivity() {
         addLog("SUSFS support: ${if (value) "on (load ko after jailbreak)" else "off"}")
     }
 
+    private fun updateVfsSupport(value: Boolean) {
+        vfsSupport = value
+        getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("vfs_support", value).apply()
+        addLog("VFS support: ${if (value) "on (load hybridmount ko after jailbreak)" else "off"}")
+    }
+
     private fun selectManager(kind: ManagerKind) {
         manager = kind
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putString("manager", kind.name).apply()
@@ -1431,6 +1454,9 @@ class MainActivity : ComponentActivity() {
             }
             extra.add(susfs to susfs)
         }
+        if (vfsSupport && exploit == ExploitKind.CVE98260) {
+            extra.add("hybridmount-6.18.21.ko" to "hybridmount-6.18.21.ko")
+        }
         return common.map { it to it } + extra
     }
 
@@ -1497,7 +1523,8 @@ class MainActivity : ComponentActivity() {
             "PYB110_LATE_LOAD=1" +
             "PYB110_UNLOAD_GUARD=${if (unloadGuard) "1" else "0"}" +
             "PYB110_DISABLE_ANTIROOT=${if (antiRootGuard) "1" else "0"}" +
-            "PYB110_SUSFS=${if (susfsSupport) "1" else "0"}"
+            "PYB110_SUSFS=${if (susfsSupport) "1" else "0"}" +
+            "PYB110_VFS=${if (vfsSupport) "1" else "0"}"
         val p = PrivService.newProcess(cmd, env, dir)
         val out = p.getInputStream()
         val err = p.getErrorStream()

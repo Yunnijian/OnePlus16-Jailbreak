@@ -84,3 +84,13 @@ The application icon is drawn by this project.
    License: Apache-2.0 (based on Miuix, entry 6, also Apache-2.0)
    Used: UI component library since v1.75
          (io.github.suqi8.coui.kmp:coui-ui/icons/preference-android:1.1.0).
+
+14. Hybrid Mount (VFS provider LKM)
+   Source: https://github.com/Hybrid-Mount/meta-hybrid_mount (VFS module,
+           fork of https://github.com/maxsteeel/nomount)
+   License: GPL-2.0-only (full text: lkm/hybridmount/LICENSE)
+   Used: vendored VFS provider kernel module source under lkm/hybridmount/,
+         built for GKI 6.18.21 by lkm/build-hybridmount.sh and bundled as
+         assets/pyb110/hybridmount-6.18.21.ko (loaded only when the optional
+         "VFS 支持" switch is on). Import baseline and divergences are listed
+         in lkm/hybridmount/PROVENANCE.

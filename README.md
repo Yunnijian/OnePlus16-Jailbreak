@@ -17,9 +17,9 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；管理器由用户安装，App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（目标 6.12.69）**：Rust 单入口 `t61269`（内嵌 `YuKongA/CVE-2026-98260` `timer.c` 的本仓库改造版 `exploit/src/t61269_plant.c`）。v1.68 起与 6.18 全面对齐：**rootd / `t61269_su` / `run612.sh` 已删除**，进程内 preflight → UAF fake cred → cred 子进程一次性 `ksud late-load --kmi android16-6.12` 后 park，收尾由同一套并行 `finish_manager` 完成，失败出口/同 boot 重跑语义一致（差别见 6.12 小节）。旧链路曾在 PLZ110 用 SukiSU 41100 跑通；单入口版需在 6.12.69 设备复测。
-- App 为底部三 tab（首页/日志/历史，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21→6.18、6.12.69→6.12），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享）；release 签名 APK v1.84 已构建（6,303,212 B，md5 `b897d36c822e57c5862bec7b03ba616c`）。
+- App 为底部三 tab（首页/日志/历史，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21→6.18、6.12.69→6.12），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享）；release 签名 APK v1.85 已构建（6,512,390 B，md5 `f22f58891f6c08080a3ed03ffea1faab`）。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
-- **内置范围**：APK 只内置 6.18 单入口 `t98260`、6.12 单入口 `t61269` 和两个 SUSFS ko（`assets/pyb110` 约 8 MB，release APK 约 6.0 MB）；**不再内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
+- **内置范围**：APK 只内置 6.18 单入口 `t98260`、6.12 单入口 `t61269`、两个 SUSFS ko 与 6.18 的 `hybridmount-6.18.21.ko`（`assets/pyb110` 约 8 MB，release APK 约 6.3 MB）；**不再内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
 ## 截图
 
@@ -106,7 +106,7 @@ OnePlus16-Jailbreak/
 │   ├── app/                     :app 模块（Kotlin/Compose/COUI/Shizuku）
 │   │   ├── src/main/java/com/pyb110/onekey/MainActivity.kt  三 tab（首页/日志/历史）与流程调度
 │   │   ├── src/main/java/com/pyb110/onekey/HistoryStore.kt  历史日志落盘（每次运行一个文件）
-│   │   ├── src/main/assets/pyb110/  t98260/t61269 + SUSFS ko
+│   │   ├── src/main/assets/pyb110/  t98260/t61269 + SUSFS/VFS ko
 │   │   ├── src/main/res/        自绘图标与资源
 │   │   ├── build.gradle.kts     签名配置 + R8
 │   │   └── proguard-rules.pro
@@ -125,7 +125,9 @@ OnePlus16-Jailbreak/
 │   ├── build-finasu.sh          FinaSU
 │   ├── build-sukisu.sh          SukiSU Ultra
 │   ├── build-susfs.sh           SUSFS guard LKM
+│   ├── build-hybridmount.sh     Hybrid Mount VFS provider LKM
 │   ├── susfs4ksu-lkm/           SUSFS LKM 源码（上游 28b2e85，GPL-2.0）
+│   ├── hybridmount/             VFS provider LKM 源码（vendored，GPL-2.0）
 │   ├── susfs-tools/             SUSFS 规则矩阵测试工具
 │   └── README.md
 ├── docs/screenshots/            App 与管理器截图
@@ -164,6 +166,7 @@ App 把设备端资产打包在 `app/app/src/main/assets/pyb110/`，运行时不
 - 98260 6.18：`t98260`（单入口 Rust + C plant）；
 - 98260 6.12：`t61269`；
 - 可选：`susfs_guard_lkm.ko` / `susfs_guard_lkm-6.12.ko`；
+- 可选（仅 6.18）：`hybridmount-6.18.21.ko`（Hybrid Mount 的 VFS provider）；
 - 不部署 ksud：运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。
 
 不再打包 KernelSU 的 `ksu-base*.ko`、`syms.txt`、`prep_*`、`forker`、`take_slide.sh` 和 64560 的任何二进制。
@@ -200,6 +203,8 @@ bash lkm/build-susfs.sh
 
 `lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `28b2e85`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall、hide_syms 以及 sus_map 的间接 show 入口都换成了 syscall / seq_operations wrapper（并适配上游新增的 `/proc/susfs_map` 规则节点）；`sus_map` 只对 KernelSU 会 umount 的 app 生效，`su` 授予 root 的进程不隐藏。规则矩阵与工具在 `lkm/susfs-tools/`。构建产物已内置到 App：开启「SUSFS 支持」开关后，越狱成功的流程末尾会自动把它部署到设备并 `ksud insmod`。
 
+`lkm/hybridmount` 是 vendored 的 Hybrid Mount VFS provider LKM 源码（上游 `Hybrid-Mount/meta-hybrid_mount`，GPL-2.0，provenance 见 `lkm/hybridmount/PROVENANCE`）。上游矩阵不含 6.18，这里用 `lkm/build-hybridmount.sh` 针对本机 GKI 6.18.21 编译（产物 390,952 B，vermagic `6.18.21-4k`），已内置到 App：开启「VFS 支持」开关后，越狱成功时随收尾流程部署并 `ksud insmod`（回退 `insmod`），日志给出 `VFS_LOADED` / `VFS_ALREADY` / `VFS_LOAD_FAIL`。metamodule 的 mount 脚本负责在 late-load 时按 VFS 规则挂载；本模块只提供内核侧的 provider。
+
 ### 设备端工具
 
 6.18 单入口 `t98260` 用 Rust 构建，并在 `build.rs` 里用 NDK 把 `exploit/src/t98260_plant.c` 编成对象链接进去：
@@ -210,18 +215,19 @@ cargo build --release --target aarch64-linux-android
 cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb110/t98260
 ```
 
-`t98260 run` / `t61269 run` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu` / `finasu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）与 `PYB110_SUSFS`（`1` / `0`）选择行为；测试钩子 `PYB110_FORCE_FAIL=cred` 强制失败；两条都只走 `ksud late-load`。
+`t98260 run` / `t61269 run` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu` / `finasu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）、`PYB110_SUSFS`（`1` / `0`）与 `PYB110_VFS`（`1` / `0`，仅 6.18 分支）选择行为；测试钩子 `PYB110_FORCE_FAIL=cred` 强制失败；两条都只走 `ksud late-load`。
 
 ## 使用
 
 1. 用无线调试启动 Shizuku，并授权本 App。
 2. **先安装所选管理器的 APK**（ksud 运行时从它的 `lib/arm64` 原地执行，不再随包提供）；再在「ROOT管理器」下拉选择 KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra；漏洞利用方式不再手选，App 按内核自动选（6.18.21→CVE-2026-98260-6.18，6.12.69→CVE-2026-98260-6.12）。App 会在启动前检查管理器是否已安装。
 3. 98260 建议在干净开机后执行：`t98260 run` 会先 probe 内核 release 与 trace 通道；plant 通常几秒内到 cred-ready（SELinux 首次命中受 spray 影响，预算 240 秒）。
-4. 「拓展功能」页内的四个开关：
+4. 「拓展功能」页内的五个开关：
    - 「越狱后禁用安全弹窗」：拿到 su 后停止 `riskdetect` HAL（`stop riskdetect`），不自动恢复、重启后恢复；不触碰 `com.oplus.exsystemservice`/截图服务。
    - 「越狱后软重启」：流程跑完且模块确认加载后，以 `su` 执行 `setprop ctl.restart zygote`；失败不会影响已完成的越狱。
    - 「越狱后卸载内核安全防护」：拿到 su 后 `rmmod oplus_secure_guard_new`，日志给出 `UNLOAD_GUARD_GONE` 或 `UNLOAD_GUARD_STILL_LOADED`；模块被引用时不会强制卸载，重启后会重新加载。
    - 「SUSFS 支持」：开启后越狱成功时自动把内置的 `susfs_guard_lkm.ko` 部署到设备，并以 `ksud insmod`（回退 `insmod`）加载；日志给出 `SUSFS_LOADED` / `SUSFS_LOAD_FAIL`，加载失败不影响已完成的越狱。默认关闭，关闭时该 ko 不会随流程部署。
+   - 「VFS 支持」：开启后越狱成功时自动部署内置的 `hybridmount-6.18.21.ko` 并加载 Hybrid Mount 的 VFS provider；仅在 6.18 分支部署（6.12 没有对应的内置 ko）。日志给出 `VFS_LOADED` / `VFS_ALREADY` / `VFS_LOAD_FAIL`，失败不影响已完成的越狱。默认关闭。注意 provider 在 `ksud late-load` 之后加载，而 metamodule 的挂载阶段发生在 late-load 内：本次开机按 `vfs` 规则配置的模块会被上游按“provider 不可用”跳过（`state.vfs_error`）；provider 在加载后对后续 VFS 操作可用。
 5. 点击「一键越狱」，等待日志出现 `DONE`。
 6. 越狱成功后用对应管理器授权 root。
 
@@ -258,6 +264,7 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb
 
 ## 校验和
 
-- release APK：`app/app/build/outputs/apk/release/app-release.apk` / 30,792,382 B / md5 `77aff6105fce3b5f9e1296132be406ac` / sha256 `f510ebde38778bd614c163a58eb13bb3509a3b39cecd12b3a13a10dd3e752b72`（本地构建产物，不入库）。
+- release APK：`app/app/build/outputs/apk/release/app-release.apk`（v1.85）/ 6,512,390 B / md5 `f22f58891f6c08080a3ed03ffea1faab` / sha256 `aefb4392327757c2bdabc42c11eafdc4f98cfb18db600327b3ffcb72554242e1`（本地构建产物，不入库）。
+- Hybrid Mount VFS provider LKM（6.18.21，内置 assets）：390,952 B / md5 `c1b55a8d5b9b0451391049fe7ea0b6bd` / sha256 `1a0802b09d1cf7460a45821e42b5474e0a48b3ee7b888eb7b8a2205f95159c73`。
 - KernelSU LKM（6.18.21）：382,232 B；Next：489,264 B；BakaSU：435,616 B；SukiSU：545,040 B；FinaSU：496,744 B（strip 后）。
 - SUSFS guard LKM（6.18.21，内置 assets）：3,456,440 B / sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`（未 strip）。
