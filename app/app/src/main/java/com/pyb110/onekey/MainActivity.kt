@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
     private var selinuxText by mutableStateOf("未知")
     private var antiRootGuard by mutableStateOf(true)
     private var softRebootAfter by mutableStateOf(false)
-    private var unloadGuard by mutableStateOf(false)
+    private var unloadGuard by mutableStateOf(true)
     private var susfsSupport by mutableStateOf(false)
     private var vfsSupport by mutableStateOf(false)
     private var tab by mutableStateOf(AppTab.HOME)
@@ -206,7 +206,7 @@ class MainActivity : ComponentActivity() {
         refreshAuth()
         antiRootGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("antiroot_guard", true)
         softRebootAfter = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("soft_reboot_after", false)
-        unloadGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("unload_guard", false)
+        unloadGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("unload_guard", true)
         susfsSupport = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("susfs_support", false)
         vfsSupport = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("vfs_support", false)
         val savedManager = getSharedPreferences("pyb110", MODE_PRIVATE).getString("manager", null)
@@ -519,20 +519,22 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 )
-                                HorizontalDivider()
-                                SwitchPreference(
-                                    title = "VFS 支持",
-                                    checked = vfsSupport,
-                                    onCheckedChange = { updateVfsSupport(it) },
-                                    startAction = {
-                                        Icon(
-                                            imageVector = Icons.Filled.AccountTree,
-                                            contentDescription = null,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            tint = COUITheme.colorScheme.onBackground
-                                        )
-                                    }
-                                )
+                                if (exploit == ExploitKind.CVE98260) {
+                                    HorizontalDivider()
+                                    SwitchPreference(
+                                        title = "VFS 支持",
+                                        checked = vfsSupport,
+                                        onCheckedChange = { updateVfsSupport(it) },
+                                        startAction = {
+                                            Icon(
+                                                imageVector = Icons.Filled.AccountTree,
+                                                contentDescription = null,
+                                                modifier = Modifier.padding(end = 6.dp),
+                                                tint = COUITheme.colorScheme.onBackground
+                                            )
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
