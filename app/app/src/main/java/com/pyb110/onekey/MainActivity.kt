@@ -51,6 +51,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
@@ -86,6 +87,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -420,63 +422,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private data class ManualPage(val title: String, val paragraphs: List<String>)
-
-    private val manualPages = listOf(
-        ManualPage(
-            "快速开始",
-            listOf(
-                "1. 先安装所选 ROOT 管理器（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）。",
-                "2. 启动 Stellar（推荐）或 Shizuku 服务，并在 Shark 里完成授权。",
-                "3. 回到首页点「一键越狱」，等待日志出现 DONE。",
-                "4. 成功后管理器会自动拉起；开启对应开关时还会停用安全弹窗、加载 SUSFS / VFS。"
-            )
-        ),
-        ManualPage(
-            "权限与准备",
-            listOf(
-                "Stellar 优先、Shizuku 兜底：两者都在时用 Stellar，Stellar 不可用才回落到 Shizuku。",
-                "管理器必须先安装：ksud 不随包内置，运行时从管理器 APK 的 lib/arm64 原地执行。",
-                "建议在干净开机后执行；6.18 与 6.12 链路按内核自动选择，不匹配会被 preflight 拒绝。"
-            )
-        ),
-        ManualPage(
-            "一键越狱流程",
-            listOf(
-                "preflight（内核 release / trace 通道）→ 98260 UAF（fake cred / SELinux 零写）→ cred 子进程一次性 ksud late-load → 等模块与 su → 收尾（ksud install、卸内核防护、SUSFS、VFS、截图恢复、拉起管理器）。",
-                "快路径 plant 约 2–3 秒、全流程约 4–9 秒；回收未命中时会多花几秒，属正常波动。",
-                "失败后不必立刻重启：喷发页会交给 holder 并退出，同一 boot 可直接再点一次；SELinux 会在下次成功后由 KSU 恢复 Enforcing。"
-            )
-        ),
-        ManualPage(
-            "功能说明",
-            listOf(
-                "首页：ROOT 管理器下拉、四个流程开关；信息卡显示内核版本与自动选择的漏洞利用方式。",
-                "日志：本次运行的实时流式日志。",
-                "历史：每次运行保存一个 .log；点开看全文，左滑条目露出「导出」按钮，可分享给其他应用。"
-            )
-        ),
-        ManualPage(
-            "异常处理",
-            listOf(
-                "PROBE_FAIL / kernel mismatch：当前内核不在支持列表（只支持 6.18.21 与 6.12.69）。",
-                "MANAGER / KSUD_MISSING：先安装对应的管理器 APK 再运行。",
-                "STALE_PLANT：同一 boot 还有竞态中的 plant；等它结束或冷启动。",
-                "PLANT_FAIL：UAF 回收连续未命中，程序会以 holder 形式退出；直接重试一次，仍失败再冷启动。",
-                "LATE_LOAD_FAIL：模块未在 15 秒内出现；查看日志里的 ksud 输出，确认管理器版本匹配。",
-                "内核崩溃/重启：属 98260 竞态固有风险，重启后再跑。"
-            )
-        ),
-        ManualPage(
-            "运行方式",
-            listOf(
-                "6.18.21 → CVE-2026-98260-6.18（t98260）；6.12.69 → CVE-2026-98260-6.12（t61269），按 uname 自动选择。",
-                "两种链路都是 Rust 单入口 + C 核心，ksud 从管理器 APK 原地执行；SUSFS 需在设置里开启并随包提供对应 ko；VFS（hybridmount）目前只内置 6.18 的 ko。",
-                "仅用于自有设备的系统研究。"
-            )
-        )
-    )
-
     @Composable
     private fun ExtrasScreen(onBack: () -> Unit) {
         BackHandler(onBack = onBack)
@@ -599,121 +544,27 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun ManualScreen(onBack: () -> Unit) {
         BackHandler(onBack = onBack)
-        val backdrop = rememberAppBackdrop()
-        var page by remember { mutableStateOf(0) }
-        val lastPage = manualPages.size
-        Scaffold(
-            topBar = {
-                BlurredBar(backdrop = backdrop) {
-                    TopAppBar(
-                        title = "使用手册",
-                        color = Color.Transparent,
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(
-                                    imageVector = COUIIcons.Back,
-                                    contentDescription = "返回",
-                                    tint = COUITheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    )
-                }
-            },
-            popupHost = { }
-        ) { inner ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+        val context = LocalContext.current
+        val markdown = remember {
+            runCatching {
+                context.assets.open("manual.md").bufferedReader().use { it.readText() }
+            }.getOrElse { "# 使用手册\n\n手册内容读取失败。" }
+        }
+        val blocks = remember(markdown) { parseManualMarkdown(markdown) }
+        Scaffold(popupHost = { }) { inner ->
+            val codeBackground = COUITheme.colorScheme.onSurface.copy(alpha = 0.08f)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = inner.calculateTopPadding() + 16.dp,
+                    start = 20.dp,
+                    end = 20.dp,
+                    bottom = inner.calculateBottomPadding() + 24.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(
-                            top = inner.calculateTopPadding() + 12.dp,
-                            start = 20.dp,
-                            end = 20.dp,
-                            bottom = 12.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        if (page == 0) {
-                            item {
-                                Text(
-                                    text = "Shark 使用手册",
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = COUITheme.colorScheme.onSurface
-                                )
-                            }
-                            item {
-                                Text(
-                                    text = "Shark 通过 Stellar（默认）或 Shizuku 以 shell 身份驱动设备端 98260 exploit，加载管理器 LKM。首次使用先完成授权，再一键越狱。",
-                                    fontSize = 15.sp,
-                                    color = COUITheme.colorScheme.onSurfaceVariantSummary
-                                )
-                            }
-                            item {
-                                Text(
-                                    text = "目录",
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(top = 8.dp),
-                                    color = COUITheme.colorScheme.onSurface
-                                )
-                            }
-                            items(manualPages.size) { i ->
-                                Text(
-                                    text = "${i + 1}. ${manualPages[i].title}",
-                                    fontSize = 17.sp,
-                                    color = COUITheme.colorScheme.primary,
-                                    textDecoration = TextDecoration.Underline,
-                                    modifier = Modifier
-                                        .clickable { page = i + 1 }
-                                        .padding(vertical = 2.dp)
-                                )
-                            }
-                        } else {
-                            val p = manualPages[page - 1]
-                            item {
-                                Text(
-                                    text = p.title,
-                                    fontSize = 26.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = COUITheme.colorScheme.onSurface
-                                )
-                            }
-                            items(p.paragraphs.size) { i ->
-                                Text(
-                                    text = p.paragraphs[i],
-                                    fontSize = 15.sp,
-                                    color = COUITheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp)
-                            .navigationBarsPadding(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            text = "上一页",
-                            onClick = { if (page > 0) page-- },
-                            enabled = page > 0
-                        )
-                        Button(
-                            onClick = { if (page < lastPage) page++ },
-                            enabled = page < lastPage,
-                            colors = ButtonDefaults.buttonColorsPrimary()
-                        ) {
-                            Text("下一页")
-                        }
-                    }
+                itemsIndexed(blocks) { _, block ->
+                    MdBlockView(block, codeBackground)
                 }
             }
         }
