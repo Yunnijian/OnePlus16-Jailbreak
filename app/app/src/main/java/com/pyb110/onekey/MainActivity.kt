@@ -840,7 +840,7 @@ class MainActivity : ComponentActivity() {
                 addLog("Starting ${exploit.fullLabel}")
                 val cmd = when (exploit) {
                     ExploitKind.CVE98260 -> arrayOf("$dir/t98260", "run")
-                    ExploitKind.CVE61269 -> arrayOf("sh", "$dir/run612.sh")
+                    ExploitKind.CVE61269 -> arrayOf("$dir/t61269", "run")
                 }
                 val rc = runStreaming(cmd, dir)
                 exit = rc
@@ -877,7 +877,7 @@ class MainActivity : ComponentActivity() {
     private fun deployPlan(): List<Pair<String, String>> {
         val common = when (exploit) {
             ExploitKind.CVE98260 -> listOf("t98260")
-            ExploitKind.CVE61269 -> listOf("t61269", "t61269_su", "run612.sh")
+            ExploitKind.CVE61269 -> listOf("t61269")
         }
         val extra = mutableListOf<Pair<String, String>>()
         if (susfsSupport) {
