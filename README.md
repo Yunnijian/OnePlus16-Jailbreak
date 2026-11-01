@@ -17,7 +17,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；管理器由用户安装，App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（目标 6.12.69）**：Rust 单入口 `t61269`（内嵌 `YuKongA/CVE-2026-98260` `timer.c` 的本仓库改造版 `exploit/src/t61269_plant.c`）。v1.68 起与 6.18 全面对齐：**rootd / `t61269_su` / `run612.sh` 已删除**，进程内 preflight → UAF fake cred → cred 子进程一次性 `ksud late-load --kmi android16-6.12` 后 park，收尾由同一套并行 `finish_manager` 完成，失败出口/同 boot 重跑语义一致（差别见 6.12 小节）。旧链路曾在 PLZ110 用 SukiSU 41100 跑通；单入口版需在 6.12.69 设备复测。
-- App 为底部三 tab（首页/日志/历史，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器与漏洞利用方式各一个下拉 + 四个流程开关），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享）；release 签名 APK v1.78 已构建（6,286,828 B，md5 `404caeb8091c9572811f61dfc59f8b00`）。
+- App 为底部三 tab（首页/日志/历史，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21→6.18、6.12.69→6.12），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享）；release 签名 APK v1.84 已构建（6,303,212 B，md5 `b897d36c822e57c5862bec7b03ba616c`）。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
 - **内置范围**：APK 只内置 6.18 单入口 `t98260`、6.12 单入口 `t61269` 和两个 SUSFS ko（`assets/pyb110` 约 8 MB，release APK 约 6.0 MB）；**不再内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
@@ -26,7 +26,6 @@ OnePlus 16（PYB110）一键越狱工具。
 <table align="center">
   <tr>
     <td align="center"><img src="docs/screenshots/app-home.jpg" width="170" alt="App 设置页"><br><sub><b>1 · App 设置页</b></sub></td>
-    <td align="center"><img src="docs/screenshots/app-exploit-dropdown.jpg" width="170" alt="漏洞利用方式下拉"><br><sub><b>2 · 漏洞利用方式</b></sub></td>
     <td align="center"><img src="docs/screenshots/app-manager-dropdown.jpg" width="170" alt="ROOT 管理器下拉"><br><sub><b>3 · ROOT 管理器</b></sub></td>
   </tr>
   <tr>
@@ -42,8 +41,8 @@ OnePlus 16（PYB110）一键越狱工具。
 ```
 ┌────────────────────────────────┐
 │ App (Kotlin/Compose/COUI)      │
-│  - ROOT 管理器 / 漏洞利用方式  │
-│  - 四个流程开关 / 日志页       │
+│  - ROOT 管理器（链按内核自动）│
+│  - 拓展功能 / 日志页           │
 └───────────────┬────────────────┘
                 │ Shizuku (uid 2000)
                 ▼
@@ -216,9 +215,9 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb
 ## 使用
 
 1. 用无线调试启动 Shizuku，并授权本 App。
-2. **先安装所选管理器的 APK**（ksud 运行时从它的 `lib/arm64` 原地执行，不再随包提供）；再在「ROOT管理器」下拉选择 KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra，在「漏洞利用方式」下拉选择 CVE-2026-98260-6.18 或 CVE-2026-98260-6.12（6.12 只接受 6.12.69 内核）。App 会在启动前检查管理器是否已安装。
+2. **先安装所选管理器的 APK**（ksud 运行时从它的 `lib/arm64` 原地执行，不再随包提供）；再在「ROOT管理器」下拉选择 KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra；漏洞利用方式不再手选，App 按内核自动选（6.18.21→CVE-2026-98260-6.18，6.12.69→CVE-2026-98260-6.12）。App 会在启动前检查管理器是否已安装。
 3. 98260 建议在干净开机后执行：`t98260 run` 会先 probe 内核 release 与 trace 通道；plant 通常几秒内到 cred-ready（SELinux 首次命中受 spray 影响，预算 240 秒）。
-4. 四个流程开关：
+4. 「拓展功能」页内的四个开关：
    - 「越狱后禁用安全弹窗」：拿到 su 后停止 `riskdetect` HAL（`stop riskdetect`），不自动恢复、重启后恢复；不触碰 `com.oplus.exsystemservice`/截图服务。
    - 「越狱后软重启」：流程跑完且模块确认加载后，以 `su` 执行 `setprop ctl.restart zygote`；失败不会影响已完成的越狱。
    - 「越狱后卸载内核安全防护」：拿到 su 后 `rmmod oplus_secure_guard_new`，日志给出 `UNLOAD_GUARD_GONE` 或 `UNLOAD_GUARD_STILL_LOADED`；模块被引用时不会强制卸载，重启后会重新加载。

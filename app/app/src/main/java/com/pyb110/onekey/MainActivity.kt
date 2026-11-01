@@ -8,8 +8,10 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -36,6 +38,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -56,11 +59,13 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.RemoveModerator
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.runtime.Composable
@@ -73,6 +78,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -82,6 +88,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -117,8 +124,10 @@ import io.github.suqi8.coui.kmp.basic.TextButton
 import io.github.suqi8.coui.kmp.basic.TopAppBar
 import io.github.suqi8.coui.kmp.icon.COUIIcons
 import io.github.suqi8.coui.kmp.icon.basic.ArrowRight
+import io.github.suqi8.coui.kmp.icon.extended.Back
 import io.github.suqi8.coui.kmp.overlay.OverlayDialog
 import io.github.suqi8.coui.kmp.icon.extended.Notes
+import io.github.suqi8.coui.kmp.preference.ArrowPreference
 import io.github.suqi8.coui.kmp.preference.SwitchPreference
 import io.github.suqi8.coui.kmp.preference.WindowDropdownPreference
 import io.github.suqi8.coui.kmp.theme.ColorSchemeMode
@@ -143,6 +152,8 @@ class MainActivity : ComponentActivity() {
     private var unloadGuard by mutableStateOf(false)
     private var susfsSupport by mutableStateOf(false)
     private var tab by mutableStateOf(AppTab.HOME)
+    private var showManual by mutableStateOf(false)
+    private var showExtras by mutableStateOf(false)
     private var historyEntries by mutableStateOf(listOf<HistoryEntry>())
     private var historyDetail by mutableStateOf<HistoryEntry?>(null)
     private var historyDetailText by mutableStateOf("")
@@ -193,11 +204,10 @@ class MainActivity : ComponentActivity() {
         softRebootAfter = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("soft_reboot_after", false)
         unloadGuard = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("unload_guard", false)
         susfsSupport = getSharedPreferences("pyb110", MODE_PRIVATE).getBoolean("susfs_support", false)
-        val savedExploit = getSharedPreferences("pyb110", MODE_PRIVATE).getString("exploit", null)
-        exploit = runCatching { ExploitKind.valueOf(savedExploit ?: "") }.getOrDefault(ExploitKind.CVE98260)
         val savedManager = getSharedPreferences("pyb110", MODE_PRIVATE).getString("manager", null)
         manager = runCatching { ManagerKind.valueOf(savedManager ?: "") }.getOrDefault(ManagerKind.KERNELSU)
         kernelVersion = runCatching { android.system.Os.uname().release }.getOrDefault("未知")
+        exploit = if (kernelVersion.contains("6.12.69")) ExploitKind.CVE61269 else ExploitKind.CVE98260
         deviceModel = resolveDeviceName()
         refreshStaticStateAsync()
         refreshKsuAsync()
@@ -302,28 +312,12 @@ class MainActivity : ComponentActivity() {
                                             onSelectedIndexChange = { selectManager(ManagerKind.entries[it]) }
                                         )
                                         HorizontalDivider()
-                                        WindowDropdownPreference(
-                                            title = "漏洞利用方式",
-                                            items = ExploitKind.entries.map { it.fullLabel },
-                                            selectedIndex = exploit.ordinal,
+                                        ArrowPreference(
+                                            title = "拓展功能",
+                                            onClick = { showExtras = true },
                                             startAction = {
                                                 Icon(
-                                                    imageVector = Icons.Filled.BugReport,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.padding(end = 6.dp),
-                                                    tint = COUITheme.colorScheme.onBackground
-                                                )
-                                            },
-                                            onSelectedIndexChange = { selectExploit(ExploitKind.entries[it]) }
-                                        )
-                                        HorizontalDivider()
-                                        SwitchPreference(
-                                            title = "越狱后禁用安全弹窗",
-                                            checked = antiRootGuard,
-                                            onCheckedChange = { updateAntiRootGuard(it) },
-                                            startAction = {
-                                                Icon(
-                                                    imageVector = Icons.Filled.NotificationsOff,
+                                                    imageVector = Icons.Filled.Tune,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
                                                     tint = COUITheme.colorScheme.onBackground
@@ -331,41 +325,13 @@ class MainActivity : ComponentActivity() {
                                             }
                                         )
                                         HorizontalDivider()
-                                        SwitchPreference(
-                                            title = "越狱后软重启",
-                                            checked = softRebootAfter,
-                                            onCheckedChange = { updateSoftRebootAfter(it) },
+                                        ArrowPreference(
+                                            title = "使用手册",
+                                            summary = "首次使用、功能说明与异常处理",
+                                            onClick = { showManual = true },
                                             startAction = {
                                                 Icon(
-                                                    imageVector = Icons.Filled.RestartAlt,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.padding(end = 6.dp),
-                                                    tint = COUITheme.colorScheme.onBackground
-                                                )
-                                            }
-                                        )
-                                        HorizontalDivider()
-                                        SwitchPreference(
-                                            title = "越狱后卸载内核安全防护",
-                                            checked = unloadGuard,
-                                            onCheckedChange = { updateUnloadGuard(it) },
-                                            startAction = {
-                                                Icon(
-                                                    imageVector = Icons.Filled.RemoveModerator,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.padding(end = 6.dp),
-                                                    tint = COUITheme.colorScheme.onBackground
-                                                )
-                                            }
-                                        )
-                                        HorizontalDivider()
-                                        SwitchPreference(
-                                            title = "SUSFS 支持",
-                                            checked = susfsSupport,
-                                            onCheckedChange = { updateSusfsSupport(it) },
-                                            startAction = {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Extension,
+                                                    imageVector = Icons.Filled.MenuBook,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
                                                     tint = COUITheme.colorScheme.onBackground
@@ -378,6 +344,7 @@ class MainActivity : ComponentActivity() {
                             item {
                                 InfoCard(
                                     kernelVersion = kernelVersion,
+                                    exploitLabel = exploit.fullLabel,
                                     deviceModel = deviceModel,
                                     fingerprint = Build.FINGERPRINT,
                                     selinux = selinuxText,
@@ -392,6 +359,24 @@ class MainActivity : ComponentActivity() {
                     Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                         BlurredBar(backdrop = appBackdrop) {
                             BottomBar(selected = tab, onSelect = { tab = it })
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = showManual,
+                        enter = slideInHorizontally(tween(240)) { it } + fadeIn(tween(240)),
+                        exit = slideOutHorizontally(tween(240)) { it } + fadeOut(tween(240))
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            ManualScreen(onBack = { showManual = false })
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = showExtras,
+                        enter = slideInHorizontally(tween(240)) { it } + fadeIn(tween(240)),
+                        exit = slideOutHorizontally(tween(240)) { it } + fadeOut(tween(240))
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            ExtrasScreen(onBack = { showExtras = false })
                         }
                     }
                 }
@@ -429,6 +414,291 @@ class MainActivity : ComponentActivity() {
             }
         ) {
             content()
+        }
+    }
+
+    private data class ManualPage(val title: String, val paragraphs: List<String>)
+
+    private val manualPages = listOf(
+        ManualPage(
+            "快速开始",
+            listOf(
+                "1. 先安装所选 ROOT 管理器（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）。",
+                "2. 启动 Stellar（推荐）或 Shizuku 服务，并在 Shark 里完成授权。",
+                "3. 回到首页点「一键越狱」，等待日志出现 DONE。",
+                "4. 成功后管理器会自动拉起；开启对应开关时还会停用安全弹窗、加载 SUSFS。"
+            )
+        ),
+        ManualPage(
+            "权限与准备",
+            listOf(
+                "Stellar 优先、Shizuku 兜底：两者都在时用 Stellar，Stellar 不可用才回落到 Shizuku。",
+                "管理器必须先安装：ksud 不随包内置，运行时从管理器 APK 的 lib/arm64 原地执行。",
+                "建议在干净开机后执行；6.18 与 6.12 链路按内核自动选择，不匹配会被 preflight 拒绝。"
+            )
+        ),
+        ManualPage(
+            "一键越狱流程",
+            listOf(
+                "preflight（内核 release / trace 通道）→ 98260 UAF（fake cred / SELinux 零写）→ cred 子进程一次性 ksud late-load → 等模块与 su → 收尾（ksud install、卸内核防护、SUSFS、截图恢复、拉起管理器）。",
+                "快路径 plant 约 2–3 秒、全流程约 4–9 秒；回收未命中时会多花几秒，属正常波动。",
+                "失败后不必立刻重启：喷发页会交给 holder 并退出，同一 boot 可直接再点一次；SELinux 会在下次成功后由 KSU 恢复 Enforcing。"
+            )
+        ),
+        ManualPage(
+            "功能说明",
+            listOf(
+                "首页：ROOT 管理器下拉、四个流程开关；信息卡显示内核版本与自动选择的漏洞利用方式。",
+                "日志：本次运行的实时流式日志。",
+                "历史：每次运行保存一个 .log；点开看全文，左滑条目露出「导出」按钮，可分享给其他应用。"
+            )
+        ),
+        ManualPage(
+            "异常处理",
+            listOf(
+                "PROBE_FAIL / kernel mismatch：当前内核不在支持列表（只支持 6.18.21 与 6.12.69）。",
+                "MANAGER / KSUD_MISSING：先安装对应的管理器 APK 再运行。",
+                "STALE_PLANT：同一 boot 还有竞态中的 plant；等它结束或冷启动。",
+                "PLANT_FAIL：UAF 回收连续未命中，程序会以 holder 形式退出；直接重试一次，仍失败再冷启动。",
+                "LATE_LOAD_FAIL：模块未在 15 秒内出现；查看日志里的 ksud 输出，确认管理器版本匹配。",
+                "内核崩溃/重启：属 98260 竞态固有风险，重启后再跑。"
+            )
+        ),
+        ManualPage(
+            "运行方式",
+            listOf(
+                "6.18.21 → CVE-2026-98260-6.18（t98260）；6.12.69 → CVE-2026-98260-6.12（t61269），按 uname 自动选择。",
+                "两种链路都是 Rust 单入口 + C 核心，ksud 从管理器 APK 原地执行；SUSFS 需在设置里开启并随包提供对应 ko。",
+                "仅用于自有设备的系统研究。"
+            )
+        )
+    )
+
+    @Composable
+    private fun ExtrasScreen(onBack: () -> Unit) {
+        BackHandler(onBack = onBack)
+        val backdrop = rememberAppBackdrop()
+        Scaffold(
+            topBar = {
+                BlurredBar(backdrop = backdrop) {
+                    TopAppBar(
+                        title = "拓展功能",
+                        color = Color.Transparent,
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    imageVector = COUIIcons.Back,
+                                    contentDescription = "返回",
+                                    tint = COUITheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    )
+                }
+            },
+            popupHost = { }
+        ) { inner ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = inner.calculateTopPadding() + 12.dp,
+                        start = 12.dp,
+                        end = 12.dp,
+                        bottom = inner.calculateBottomPadding() + 24.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column {
+                                SwitchPreference(
+                                    title = "越狱后禁用安全弹窗",
+                                    checked = antiRootGuard,
+                                    onCheckedChange = { updateAntiRootGuard(it) },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.NotificationsOff,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                SwitchPreference(
+                                    title = "越狱后软重启",
+                                    checked = softRebootAfter,
+                                    onCheckedChange = { updateSoftRebootAfter(it) },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.RestartAlt,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                SwitchPreference(
+                                    title = "越狱后卸载内核安全防护",
+                                    checked = unloadGuard,
+                                    onCheckedChange = { updateUnloadGuard(it) },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.RemoveModerator,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                SwitchPreference(
+                                    title = "SUSFS 支持",
+                                    checked = susfsSupport,
+                                    onCheckedChange = { updateSusfsSupport(it) },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Extension,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ManualScreen(onBack: () -> Unit) {
+        BackHandler(onBack = onBack)
+        val backdrop = rememberAppBackdrop()
+        var page by remember { mutableStateOf(0) }
+        val lastPage = manualPages.size
+        Scaffold(
+            topBar = {
+                BlurredBar(backdrop = backdrop) {
+                    TopAppBar(
+                        title = "使用手册",
+                        color = Color.Transparent,
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    imageVector = COUIIcons.Back,
+                                    contentDescription = "返回",
+                                    tint = COUITheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    )
+                }
+            },
+            popupHost = { }
+        ) { inner ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(
+                            top = inner.calculateTopPadding() + 12.dp,
+                            start = 20.dp,
+                            end = 20.dp,
+                            bottom = 12.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (page == 0) {
+                            item {
+                                Text(
+                                    text = "Shark 使用手册",
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = COUITheme.colorScheme.onSurface
+                                )
+                            }
+                            item {
+                                Text(
+                                    text = "Shark 通过 Stellar（默认）或 Shizuku 以 shell 身份驱动设备端 98260 exploit，加载管理器 LKM。首次使用先完成授权，再一键越狱。",
+                                    fontSize = 15.sp,
+                                    color = COUITheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
+                            item {
+                                Text(
+                                    text = "目录",
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 8.dp),
+                                    color = COUITheme.colorScheme.onSurface
+                                )
+                            }
+                            items(manualPages.size) { i ->
+                                Text(
+                                    text = "${i + 1}. ${manualPages[i].title}",
+                                    fontSize = 17.sp,
+                                    color = COUITheme.colorScheme.primary,
+                                    textDecoration = TextDecoration.Underline,
+                                    modifier = Modifier
+                                        .clickable { page = i + 1 }
+                                        .padding(vertical = 2.dp)
+                                )
+                            }
+                        } else {
+                            val p = manualPages[page - 1]
+                            item {
+                                Text(
+                                    text = p.title,
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = COUITheme.colorScheme.onSurface
+                                )
+                            }
+                            items(p.paragraphs.size) { i ->
+                                Text(
+                                    text = p.paragraphs[i],
+                                    fontSize = 15.sp,
+                                    color = COUITheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .navigationBarsPadding(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            text = "上一页",
+                            onClick = { if (page > 0) page-- },
+                            enabled = page > 0
+                        )
+                        Button(
+                            onClick = { if (page < lastPage) page++ },
+                            enabled = page < lastPage,
+                            colors = ButtonDefaults.buttonColorsPrimary()
+                        ) {
+                            Text("下一页")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -525,6 +795,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun InfoCard(
         kernelVersion: String,
+        exploitLabel: String,
         deviceModel: String,
         fingerprint: String,
         selinux: String,
@@ -533,6 +804,7 @@ class MainActivity : ComponentActivity() {
         Card(modifier = modifier) {
             Column(modifier = Modifier.padding(16.dp)) {
                 InfoText(Icons.Filled.DeveloperBoard, "内核版本", kernelVersion)
+                InfoText(Icons.Filled.BugReport, "漏洞利用方式", exploitLabel)
                 InfoText(Icons.Filled.Smartphone, "设备型号", deviceModel)
                 InfoText(Icons.Filled.Fingerprint, "系统指纹", fingerprint)
                 InfoText(Icons.Filled.Security, "SELinux 状态", selinux, bottomPadding = 0.dp)
@@ -689,21 +961,30 @@ class MainActivity : ComponentActivity() {
                 .padding(horizontal = 12.dp)
                 .padding(bottom = 12.dp)
         ) {
+            val reveal = (-offset.value).coerceIn(0f, actionWidth)
             Box(
                 modifier = Modifier.matchParentSize(),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                Button(
-                    onClick = {
-                        scope.launch { offset.animateTo(0f, tween(200)) }
-                        onExport()
-                    },
+                Box(
                     modifier = Modifier
+                        .width(with(LocalDensity.current) { reveal.toDp() })
                         .fillMaxHeight()
-                        .width(88.dp),
-                    colors = ButtonDefaults.buttonColorsPrimary()
+                        .clipToBounds()
                 ) {
-                    Text("导出")
+                    Button(
+                        onClick = {
+                            scope.launch { offset.animateTo(0f, tween(200)) }
+                            onExport()
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(88.dp)
+                            .fillMaxHeight(),
+                        colors = ButtonDefaults.buttonColorsPrimary()
+                    ) {
+                        Text("导出")
+                    }
                 }
             }
             Card(
@@ -990,12 +1271,6 @@ class MainActivity : ComponentActivity() {
         susfsSupport = value
         getSharedPreferences("pyb110", MODE_PRIVATE).edit().putBoolean("susfs_support", value).apply()
         addLog("SUSFS support: ${if (value) "on (load ko after jailbreak)" else "off"}")
-    }
-
-    private fun selectExploit(kind: ExploitKind) {
-        exploit = kind
-        getSharedPreferences("pyb110", MODE_PRIVATE).edit().putString("exploit", kind.name).apply()
-        addLog("Exploit selected: ${kind.fullLabel}")
     }
 
     private fun selectManager(kind: ManagerKind) {
