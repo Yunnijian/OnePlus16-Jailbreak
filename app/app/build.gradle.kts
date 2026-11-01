@@ -21,10 +21,10 @@ android {
     buildToolsVersion = "37.0.0"
     defaultConfig {
         applicationId = "com.pyb110.onekey"
-        minSdk = 31
+        minSdk = 33
         targetSdk = 37
-        versionCode = 64
-        versionName = "1.74"
+        versionCode = 68
+        versionName = "1.78"
     }
     buildFeatures {
         compose = true
@@ -63,9 +63,10 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
-    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
-    implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
-    implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
+    implementation("io.github.suqi8.coui.kmp:coui-ui-android:1.1.0")
+    implementation("io.github.suqi8.coui.kmp:coui-icons-android:1.1.0")
+    implementation("io.github.suqi8.coui.kmp:coui-preference-android:1.1.0")
+    implementation("io.github.suqi8.coui.kmp:coui-blur-android:1.1.0")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:aidl:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")

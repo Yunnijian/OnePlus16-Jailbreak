@@ -15,10 +15,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -36,12 +38,14 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -65,12 +69,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,33 +89,42 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.core.content.FileProvider
 import java.io.File
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 import roro.stellar.Stellar
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.NavigationBar
-import top.yukonga.miuix.kmp.basic.NavigationBarItem
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.basic.ArrowRight
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.icon.extended.Notes
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import io.github.suqi8.coui.kmp.basic.Button
+import io.github.suqi8.coui.kmp.basic.ButtonDefaults
+import io.github.suqi8.coui.kmp.blur.BlendColorEntry
+import io.github.suqi8.coui.kmp.blur.BlurColors
+import io.github.suqi8.coui.kmp.blur.LayerBackdrop
+import io.github.suqi8.coui.kmp.blur.layerBackdrop
+import io.github.suqi8.coui.kmp.blur.rememberLayerBackdrop
+import io.github.suqi8.coui.kmp.blur.textureBlur
+import io.github.suqi8.coui.kmp.shader.isRenderEffectSupported
+import io.github.suqi8.coui.kmp.basic.Card
+import io.github.suqi8.coui.kmp.basic.CardDefaults
+import io.github.suqi8.coui.kmp.basic.HorizontalDivider
+import io.github.suqi8.coui.kmp.basic.Icon
+import io.github.suqi8.coui.kmp.basic.IconButton
+import io.github.suqi8.coui.kmp.basic.COUIScrollBehavior
+import io.github.suqi8.coui.kmp.basic.NavigationBar
+import io.github.suqi8.coui.kmp.basic.NavigationBarItem
+import io.github.suqi8.coui.kmp.basic.Scaffold
+import io.github.suqi8.coui.kmp.basic.Text
+import io.github.suqi8.coui.kmp.basic.TextButton
+import io.github.suqi8.coui.kmp.basic.TopAppBar
+import io.github.suqi8.coui.kmp.icon.COUIIcons
+import io.github.suqi8.coui.kmp.icon.basic.ArrowRight
+import io.github.suqi8.coui.kmp.overlay.OverlayDialog
+import io.github.suqi8.coui.kmp.icon.extended.Notes
+import io.github.suqi8.coui.kmp.preference.SwitchPreference
+import io.github.suqi8.coui.kmp.preference.WindowDropdownPreference
+import io.github.suqi8.coui.kmp.theme.ColorSchemeMode
+import io.github.suqi8.coui.kmp.theme.COUITheme
+import io.github.suqi8.coui.kmp.theme.ThemeController
+import io.github.suqi8.coui.kmp.utils.PressFeedbackType
 
 class MainActivity : ComponentActivity() {
     private val logs = mutableStateListOf<String>()
@@ -186,12 +204,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themeController = remember { ThemeController(colorSchemeMode = ColorSchemeMode.System) }
-            MiuixTheme(themeController) {
+            COUITheme(themeController) {
                 /* Root scaffold: hosts OverlayDialog/popups (each tab's own
                  * Scaffold passes an empty popupHost, so the root is the only
                  * host for dialogs opened from the tab content). */
+                val appBackdrop = rememberAppBackdrop()
                 Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0)) {
-                Column(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize()) {
                     AnimatedContent(
                         targetState = tab,
                         transitionSpec = {
@@ -200,30 +219,42 @@ class MainActivity : ComponentActivity() {
                                 (slideOutHorizontally(tween(240)) { -it / 4 * dir } + fadeOut(tween(240)))
                         },
                         label = "tab",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxSize()
                     ) { t ->
                 if (t == AppTab.LOGS) {
-                    LogScreen(state = logs.toList())
+                    LogScreen(state = logs.toList(), backdrop = appBackdrop)
                 } else if (t == AppTab.HISTORY) {
-                    HistoryScreen()
+                    HistoryScreen(backdrop = appBackdrop)
                 } else {
-                    val scrollBehavior = MiuixScrollBehavior()
+                    val scrollBehavior = COUIScrollBehavior()
                     Scaffold(
                         contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top),
                         topBar = {
-                            TopAppBar(
-                                title = "Shark",
-                                scrollBehavior = scrollBehavior
-                            )
+                            BlurredBar(backdrop = appBackdrop) {
+                                TopAppBar(
+                                    title = "Shark",
+                                    scrollBehavior = scrollBehavior,
+                                    color = Color.Transparent
+                                )
+                            }
                         }
                     ) { inner ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(
+                                    if (appBackdrop != null) Modifier.layerBackdrop(appBackdrop) else Modifier
+                                )
+                        ) {
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .nestedScroll(scrollBehavior.nestedScrollConnection)
-                                .padding(inner)
                                 .padding(horizontal = 12.dp),
-                            contentPadding = PaddingValues(vertical = 12.dp),
+                            contentPadding = PaddingValues(
+                                top = inner.calculateTopPadding() + 12.dp,
+                                bottom = 12.dp + 100.dp
+                            ),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             item {
@@ -265,7 +296,7 @@ class MainActivity : ComponentActivity() {
                                                     imageVector = Icons.Filled.Tag,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
-                                                    tint = MiuixTheme.colorScheme.onBackground
+                                                    tint = COUITheme.colorScheme.onBackground
                                                 )
                                             },
                                             onSelectedIndexChange = { selectManager(ManagerKind.entries[it]) }
@@ -280,7 +311,7 @@ class MainActivity : ComponentActivity() {
                                                     imageVector = Icons.Filled.BugReport,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
-                                                    tint = MiuixTheme.colorScheme.onBackground
+                                                    tint = COUITheme.colorScheme.onBackground
                                                 )
                                             },
                                             onSelectedIndexChange = { selectExploit(ExploitKind.entries[it]) }
@@ -295,7 +326,7 @@ class MainActivity : ComponentActivity() {
                                                     imageVector = Icons.Filled.NotificationsOff,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
-                                                    tint = MiuixTheme.colorScheme.onBackground
+                                                    tint = COUITheme.colorScheme.onBackground
                                                 )
                                             }
                                         )
@@ -309,7 +340,7 @@ class MainActivity : ComponentActivity() {
                                                     imageVector = Icons.Filled.RestartAlt,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
-                                                    tint = MiuixTheme.colorScheme.onBackground
+                                                    tint = COUITheme.colorScheme.onBackground
                                                 )
                                             }
                                         )
@@ -323,7 +354,7 @@ class MainActivity : ComponentActivity() {
                                                     imageVector = Icons.Filled.RemoveModerator,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
-                                                    tint = MiuixTheme.colorScheme.onBackground
+                                                    tint = COUITheme.colorScheme.onBackground
                                                 )
                                             }
                                         )
@@ -337,7 +368,7 @@ class MainActivity : ComponentActivity() {
                                                     imageVector = Icons.Filled.Extension,
                                                     contentDescription = null,
                                                     modifier = Modifier.padding(end = 6.dp),
-                                                    tint = MiuixTheme.colorScheme.onBackground
+                                                    tint = COUITheme.colorScheme.onBackground
                                                 )
                                             }
                                         )
@@ -354,13 +385,50 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+                        }
                     }
                 }
                     }
-                    BottomBar(selected = tab, onSelect = { tab = it })
+                    Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+                        BlurredBar(backdrop = appBackdrop) {
+                            BottomBar(selected = tab, onSelect = { tab = it })
+                        }
+                    }
                 }
                 }
             }
+        }
+    }
+
+    @Composable
+    private fun rememberAppBackdrop(): LayerBackdrop? {
+        if (!isRenderEffectSupported()) return null
+        val surfaceColor = COUITheme.colorScheme.surface
+        return rememberLayerBackdrop {
+            drawRect(surfaceColor)
+            drawContent()
+        }
+    }
+
+    @Composable
+    private fun BlurredBar(backdrop: LayerBackdrop?, content: @Composable () -> Unit) {
+        Box(
+            modifier = if (backdrop != null) {
+                Modifier.textureBlur(
+                    backdrop = backdrop,
+                    shape = RectangleShape,
+                    blurRadius = 25f,
+                    colors = BlurColors(
+                        blendColors = listOf(
+                            BlendColorEntry(color = COUITheme.colorScheme.surface.copy(0.87f))
+                        )
+                    )
+                )
+            } else {
+                Modifier
+            }
+        ) {
+            content()
         }
     }
 
@@ -435,19 +503,19 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier
                     .padding(end = 12.dp)
                     .size(24.dp),
-                tint = MiuixTheme.colorScheme.onSurface
+                tint = COUITheme.colorScheme.onSurface
             )
             Column {
                 Text(
                     text = title,
-                    fontSize = MiuixTheme.textStyles.headline1.fontSize,
+                    fontSize = COUITheme.textStyles.headline1.fontSize,
                     fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface
+                    color = COUITheme.colorScheme.onSurface
                 )
                 Text(
                     text = content,
-                    fontSize = MiuixTheme.textStyles.body2.fontSize,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    fontSize = COUITheme.textStyles.body2.fontSize,
+                    color = COUITheme.colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
@@ -473,10 +541,12 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun LogScreen(state: List<String>) {
+    private fun LogScreen(state: List<String>, backdrop: LayerBackdrop?) {
         Scaffold(
             topBar = {
-                TopAppBar(title = "日志")
+                BlurredBar(backdrop = backdrop) {
+                    TopAppBar(title = "日志", color = Color.Transparent)
+                }
             },
             popupHost = { }
         ) { inner ->
@@ -488,7 +558,7 @@ class MainActivity : ComponentActivity() {
                     Text(
                         text = "暂无日志",
                         fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        color = COUITheme.colorScheme.onSurfaceVariantSummary
                     )
                 }
             } else {
@@ -496,13 +566,24 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(state.size) {
                     listState.scrollToItem(state.lastIndex)
                 }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+                ) {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize().padding(inner),
-                    contentPadding = PaddingValues(12.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = inner.calculateTopPadding() + 12.dp,
+                        bottom = 12.dp + 100.dp,
+                        start = 12.dp,
+                        end = 12.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     items(state) { line -> Text(line, fontSize = 11.sp) }
+                }
                 }
             }
         }
@@ -510,7 +591,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun BottomBar(selected: AppTab, onSelect: (AppTab) -> Unit) {
-        NavigationBar {
+        NavigationBar(color = Color.Transparent) {
             AppTab.entries.forEach { t ->
                 NavigationBarItem(
                     selected = t == selected,
@@ -523,11 +604,13 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun HistoryScreen() {
+    private fun HistoryScreen(backdrop: LayerBackdrop?) {
         LaunchedEffect(Unit) { refreshHistory() }
         Scaffold(
             topBar = {
-                TopAppBar(title = "历史")
+                BlurredBar(backdrop = backdrop) {
+                    TopAppBar(title = "历史", color = Color.Transparent)
+                }
             },
             popupHost = { }
         ) { inner ->
@@ -541,13 +624,21 @@ class MainActivity : ComponentActivity() {
                         text = "暂无记录",
                         fontSize = 17.sp,
                         fontWeight = FontWeight(550),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        color = COUITheme.colorScheme.onSurfaceVariantSummary
                     )
                 }
             } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+                ) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(inner),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp)
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = inner.calculateTopPadding() + 6.dp,
+                        bottom = 12.dp + 100.dp
+                    )
                 ) {
                     items(entries) { e ->
                         HistoryEntryCard(entry = e, onClick = {
@@ -559,8 +650,9 @@ class MainActivity : ComponentActivity() {
                                     historyDetail = e
                                 }
                             }
-                        })
+                        }, onExport = { shareHistory(e) })
                     }
+                }
                 }
             }
         }
@@ -583,20 +675,67 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    /* Layout mirrors KernelSU Manager's sulog page (Miuix): entry card with
+    /* Layout mirrors KernelSU Manager's sulog page (COUI renders it): entry card with
      * marquee title, description, timestamp, status tags, right-side status
      * and arrow; detail opens an OverlayDialog with monospace selectable text. */
     @Composable
-    private fun HistoryEntryCard(entry: HistoryEntry, onClick: () -> Unit) {
-        Card(
+    private fun HistoryEntryCard(entry: HistoryEntry, onClick: () -> Unit, onExport: () -> Unit) {
+        val scope = rememberCoroutineScope()
+        val offset = remember { Animatable(0f) }
+        val actionWidth = with(LocalDensity.current) { 88.dp.toPx() }
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
-                .padding(bottom = 12.dp),
-            onClick = onClick,
-            showIndication = true,
-            insideMargin = PaddingValues(16.dp)
+                .padding(bottom = 12.dp)
         ) {
+            Box(
+                modifier = Modifier.matchParentSize(),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Button(
+                    onClick = {
+                        scope.launch { offset.animateTo(0f, tween(200)) }
+                        onExport()
+                    },
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(88.dp),
+                    colors = ButtonDefaults.buttonColorsPrimary()
+                ) {
+                    Text("导出")
+                }
+            }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { translationX = offset.value }
+                    .pointerInput(entry.fileName) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                val target = if (offset.value < -actionWidth / 2f) -actionWidth else 0f
+                                scope.launch { offset.animateTo(target, tween(200)) }
+                            },
+                            onDragCancel = {
+                                scope.launch { offset.animateTo(0f, tween(200)) }
+                            },
+                            onHorizontalDrag = { _, delta ->
+                                scope.launch {
+                                    offset.snapTo((offset.value + delta).coerceIn(-actionWidth, 0f))
+                                }
+                            }
+                        )
+                    },
+                onClick = {
+                    if (offset.value < -1f) {
+                        scope.launch { offset.animateTo(0f, tween(200)) }
+                    } else {
+                        onClick()
+                    }
+                },
+                showIndication = true,
+                insideMargin = PaddingValues(16.dp)
+            ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(
                     modifier = Modifier.weight(1f),
@@ -606,14 +745,14 @@ class MainActivity : ComponentActivity() {
                         text = entry.manager,
                         modifier = Modifier.basicMarquee(),
                         fontWeight = FontWeight(550),
-                        color = MiuixTheme.colorScheme.onSurface,
+                        color = COUITheme.colorScheme.onSurface,
                         maxLines = 1,
                         softWrap = false
                     )
                     Text(
                         text = entry.exploit,
                         fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = COUITheme.colorScheme.onSurfaceVariantSummary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -622,27 +761,27 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.basicMarquee(),
                         fontSize = 12.sp,
                         fontWeight = FontWeight(550),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = COUITheme.colorScheme.onSurfaceVariantSummary,
                         maxLines = 1,
                         softWrap = false
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         val colors = listOf(
-                            MiuixTheme.colorScheme.primary to MiuixTheme.colorScheme.onPrimary,
-                            MiuixTheme.colorScheme.secondaryContainer to
-                                MiuixTheme.colorScheme.onSecondaryContainer,
-                            MiuixTheme.colorScheme.tertiaryContainer to
-                                MiuixTheme.colorScheme.onTertiaryContainer,
+                            COUITheme.colorScheme.primary to COUITheme.colorScheme.onPrimary,
+                            COUITheme.colorScheme.secondaryContainer to
+                                COUITheme.colorScheme.onSecondaryContainer,
+                            COUITheme.colorScheme.tertiaryContainer to
+                                COUITheme.colorScheme.onTertiaryContainer,
                         )
                         historyTags(entry).forEachIndexed { index, tag ->
                             val (bg, fg) = colors.getOrElse(index) { colors.last() }
-                            MiuixStatusTag(label = tag, backgroundColor = bg, contentColor = fg)
+                            CouiStatusTag(label = tag, backgroundColor = bg, contentColor = fg)
                         }
                     }
                 }
                 Text(
                     text = historyValue(entry),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                    color = COUITheme.colorScheme.onSurfaceVariantActions,
                     fontSize = 12.sp,
                     fontWeight = FontWeight(550),
                     maxLines = 1,
@@ -650,19 +789,20 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.padding(start = 16.dp)
                 )
                 Icon(
-                    imageVector = MiuixIcons.Basic.ArrowRight,
+                    imageVector = COUIIcons.Basic.ArrowRight,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                    tint = COUITheme.colorScheme.onSurfaceVariantActions,
                     modifier = Modifier
                         .padding(start = 8.dp)
                         .size(width = 10.dp, height = 16.dp)
                 )
             }
+            }
         }
     }
 
     @Composable
-    private fun MiuixStatusTag(label: String, backgroundColor: Color, contentColor: Color) {
+    private fun CouiStatusTag(label: String, backgroundColor: Color, contentColor: Color) {
         Box(
             modifier = Modifier.background(
                 color = backgroundColor,
@@ -685,6 +825,39 @@ class MainActivity : ComponentActivity() {
         e.model.takeIf { it.isNotBlank() },
         e.kernel.takeIf { it.isNotBlank() }?.substringBefore('-')
     )
+
+    /* Right-swipe export: copy the run log to cache/export and open the
+     * system share sheet through FileProvider. */
+    private fun shareHistory(entry: HistoryEntry) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val text = HistoryStore.read(applicationContext, entry.fileName)
+            val dir = File(cacheDir, "export").apply { mkdirs() }
+            val out = File(dir, entry.fileName)
+            out.writeText(text)
+            val uri = runCatching {
+                FileProvider.getUriForFile(
+                    applicationContext,
+                    "$packageName.fileprovider",
+                    out
+                )
+            }.getOrNull()
+            withContext(Dispatchers.Main) {
+                if (uri == null) {
+                    addLog("Failed to prepare log for sharing")
+                    return@withContext
+                }
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "Shark log ${entry.startTime}")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                runCatching {
+                    startActivity(Intent.createChooser(send, "导出日志"))
+                }.onFailure { addLog("Failed to open share sheet: $it") }
+            }
+        }
+    }
 
     private fun historyValue(e: HistoryEntry): String {
         val dur = e.durationMs?.let { String.format(java.util.Locale.US, "%.1fs", it / 1000.0) }
@@ -712,7 +885,9 @@ class MainActivity : ComponentActivity() {
             title = "${displayEntry.startTime}  ${displayEntry.manager}",
             onDismissRequest = onDismiss,
             content = {
-                Column {
+                Column(
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+                ) {
                     SelectionContainer(
                         modifier = Modifier
                             .weight(1f, fill = false)
@@ -1083,7 +1258,7 @@ class MainActivity : ComponentActivity() {
 
     private enum class AppTab(val label: String, val icon: ImageVector) {
         HOME("首页", Icons.Filled.Home),
-        LOGS("日志", MiuixIcons.Notes),
+        LOGS("日志", COUIIcons.Notes),
         HISTORY("历史", Icons.Filled.History)
     }
 
