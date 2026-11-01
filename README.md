@@ -17,7 +17,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；管理器由用户安装，App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（目标 6.12.69）**：Rust 单入口 `t61269`（内嵌 `YuKongA/CVE-2026-98260` `timer.c` 的本仓库改造版 `exploit/src/t61269_plant.c`）。v1.68 起与 6.18 全面对齐：**rootd / `t61269_su` / `run612.sh` 已删除**，进程内 preflight → UAF fake cred → cred 子进程一次性 `ksud late-load --kmi android16-6.12` 后 park，收尾由同一套并行 `finish_manager` 完成，失败出口/同 boot 重跑语义一致（差别见 6.12 小节）。旧链路曾在 PLZ110 用 SukiSU 41100 跑通；单入口版需在 6.12.69 设备复测。
-- App 为底部三 tab（首页/日志/历史，Miuix `NavigationBar` 组件）：首页是分组设置（ROOT 管理器与漏洞利用方式各一个下拉 + 四个流程开关），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除）；release 签名 APK v1.72 已构建（5,970,640 B，md5 `bb015b0e9cbc474e2b86d28d1670eb3b`）。
+- App 为底部三 tab（首页/日志/历史，Miuix `NavigationBar` 组件）：首页是分组设置（ROOT 管理器与漏洞利用方式各一个下拉 + 四个流程开关），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除）；release 签名 APK v1.74 已构建（6,220,868 B，md5 `1249efefbe3fdd0b68e57751c6384c4f`）。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
 - **内置范围**：APK 只内置 6.18 单入口 `t98260`、6.12 单入口 `t61269` 和两个 SUSFS ko（`assets/pyb110` 约 8 MB，release APK 约 6.0 MB）；**不再内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 

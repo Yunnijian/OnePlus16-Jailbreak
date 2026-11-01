@@ -16,7 +16,13 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,7 +71,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,6 +98,8 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.basic.ArrowRight
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.icon.extended.Notes
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
@@ -177,6 +187,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeController = remember { ThemeController(colorSchemeMode = ColorSchemeMode.System) }
             MiuixTheme(themeController) {
+                /* Root scaffold: hosts OverlayDialog/popups (each tab's own
+                 * Scaffold passes an empty popupHost, so the root is the only
+                 * host for dialogs opened from the tab content). */
+                Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0)) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     AnimatedContent(
                         targetState = tab,
@@ -345,6 +359,7 @@ class MainActivity : ComponentActivity() {
                     }
                     BottomBar(selected = tab, onSelect = { tab = it })
                 }
+                }
             }
         }
     }
@@ -509,23 +524,53 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun HistoryScreen() {
-        AnimatedContent(
-            targetState = historyDetail != null,
-            transitionSpec = {
-                val dir = if (targetState) 1 else -1
-                (slideInHorizontally(tween(240)) { it / 3 * dir } + fadeIn(tween(240))) togetherWith
-                    (slideOutHorizontally(tween(240)) { -it / 3 * dir } + fadeOut(tween(240)))
+        LaunchedEffect(Unit) { refreshHistory() }
+        Scaffold(
+            topBar = {
+                TopAppBar(title = "历史")
             },
-            label = "history"
-        ) { showDetail ->
-        val detail = historyDetail
-        if (showDetail && detail != null) {
-            HistoryDetail(
-                entry = detail,
-                text = historyDetailText,
-                onBack = { historyDetail = null },
-                onDelete = {
-                    val name = detail.fileName
+            popupHost = { }
+        ) { inner ->
+            val entries = historyEntries
+            if (entries.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(inner),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "暂无记录",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight(550),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(inner),
+                    contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp)
+                ) {
+                    items(entries) { e ->
+                        HistoryEntryCard(entry = e, onClick = {
+                            val name = e.fileName
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                val text = HistoryStore.read(applicationContext, name)
+                                withContext(Dispatchers.Main) {
+                                    historyDetailText = text
+                                    historyDetail = e
+                                }
+                            }
+                        })
+                    }
+                }
+            }
+        }
+        HistoryDetailDialog(
+            entry = historyDetail,
+            text = historyDetailText,
+            onDismiss = { historyDetail = null },
+            onDelete = {
+                val name = historyDetail?.fileName
+                if (name != null) {
                     lifecycleScope.launch(Dispatchers.IO) {
                         HistoryStore.delete(applicationContext, name)
                         withContext(Dispatchers.Main) {
@@ -534,72 +579,112 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-            )
-        } else {
-            LaunchedEffect(Unit) { refreshHistory() }
-            Scaffold(
-                topBar = {
-                    TopAppBar(title = "历史")
-                },
-                popupHost = { }
-            ) { inner ->
-                val entries = historyEntries
-                if (entries.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize().padding(inner),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "暂无记录",
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            }
+        )
+    }
+
+    /* Layout mirrors KernelSU Manager's sulog page (Miuix): entry card with
+     * marquee title, description, timestamp, status tags, right-side status
+     * and arrow; detail opens an OverlayDialog with monospace selectable text. */
+    @Composable
+    private fun HistoryEntryCard(entry: HistoryEntry, onClick: () -> Unit) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp),
+            onClick = onClick,
+            showIndication = true,
+            insideMargin = PaddingValues(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = entry.manager,
+                        modifier = Modifier.basicMarquee(),
+                        fontWeight = FontWeight(550),
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Text(
+                        text = entry.exploit,
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = entry.startTime,
+                        modifier = Modifier.basicMarquee(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight(550),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val colors = listOf(
+                            MiuixTheme.colorScheme.primary to MiuixTheme.colorScheme.onPrimary,
+                            MiuixTheme.colorScheme.secondaryContainer to
+                                MiuixTheme.colorScheme.onSecondaryContainer,
+                            MiuixTheme.colorScheme.tertiaryContainer to
+                                MiuixTheme.colorScheme.onTertiaryContainer,
                         )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(inner),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(entries) { e ->
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            val name = e.fileName
-                                            lifecycleScope.launch(Dispatchers.IO) {
-                                                val text = HistoryStore.read(applicationContext, name)
-                                                withContext(Dispatchers.Main) {
-                                                    historyDetailText = text
-                                                    historyDetail = e
-                                                }
-                                            }
-                                        }
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${e.startTime}  ${e.manager} · ${e.exploit.substringAfterLast('-')}",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MiuixTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Text(
-                                        text = historyValue(e),
-                                        fontSize = 13.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                    )
-                                }
-                            }
+                        historyTags(entry).forEachIndexed { index, tag ->
+                            val (bg, fg) = colors.getOrElse(index) { colors.last() }
+                            MiuixStatusTag(label = tag, backgroundColor = bg, contentColor = fg)
                         }
                     }
                 }
+                Text(
+                    text = historyValue(entry),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight(550),
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+                Icon(
+                    imageVector = MiuixIcons.Basic.ArrowRight,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .size(width = 10.dp, height = 16.dp)
+                )
             }
         }
+    }
+
+    @Composable
+    private fun MiuixStatusTag(label: String, backgroundColor: Color, contentColor: Color) {
+        Box(
+            modifier = Modifier.background(
+                color = backgroundColor,
+                shape = RoundedCornerShape(6.dp)
+            )
+        ) {
+            Text(
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                text = label,
+                color = contentColor,
+                fontSize = 9.sp,
+                fontWeight = FontWeight(750),
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
+
+    private fun historyTags(e: HistoryEntry): List<String> = listOfNotNull(
+        e.model.takeIf { it.isNotBlank() },
+        e.kernel.takeIf { it.isNotBlank() }?.substringBefore('-')
+    )
 
     private fun historyValue(e: HistoryEntry): String {
         val dur = e.durationMs?.let { String.format(java.util.Locale.US, "%.1fs", it / 1000.0) }
@@ -613,41 +698,49 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun HistoryDetail(entry: HistoryEntry, text: String, onBack: () -> Unit, onDelete: () -> Unit) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = entry.startTime,
-                    actions = {
-                        TextButton(text = "删除", onClick = onDelete)
-                        TextButton(text = "返回", onClick = onBack)
+    private fun HistoryDetailDialog(
+        entry: HistoryEntry?,
+        text: String,
+        onDismiss: () -> Unit,
+        onDelete: () -> Unit
+    ) {
+        var lastEntry by remember { mutableStateOf(entry) }
+        if (entry != null) lastEntry = entry
+        val displayEntry = lastEntry ?: return
+        OverlayDialog(
+            show = entry != null,
+            title = "${displayEntry.startTime}  ${displayEntry.manager}",
+            onDismissRequest = onDismiss,
+            content = {
+                Column {
+                    SelectionContainer(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            text = text.ifEmpty { "暂无日志" },
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
                     }
-                )
-            },
-            popupHost = { }
-        ) { inner ->
-            if (text.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(inner),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "暂无日志",
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            } else {
-                val lines = remember(text) { text.lines() }
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(inner),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    items(lines) { line -> Text(line, fontSize = 11.sp) }
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            modifier = Modifier.weight(1f),
+                            text = "删除",
+                            onClick = onDelete
+                        )
+                        TextButton(
+                            modifier = Modifier.weight(1f),
+                            text = "确定",
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
                 }
             }
-        }
+        )
     }
 
 
