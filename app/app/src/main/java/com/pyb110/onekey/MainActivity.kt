@@ -212,7 +212,12 @@ class MainActivity : ComponentActivity() {
         val savedManager = getSharedPreferences("pyb110", MODE_PRIVATE).getString("manager", null)
         manager = runCatching { ManagerKind.valueOf(savedManager ?: "") }.getOrDefault(ManagerKind.KERNELSU)
         kernelVersion = runCatching { android.system.Os.uname().release }.getOrDefault("未知")
-        exploit = if (kernelVersion.contains("6.12.69")) ExploitKind.CVE61269 else ExploitKind.CVE98260
+        exploit = when {
+            kernelVersion == V2505A_KERNEL_RELEASE &&
+                Build.MANUFACTURER.equals("vivo", ignoreCase = true) -> ExploitKind.CVE2505A
+            kernelVersion.contains("6.12.69") -> ExploitKind.CVE61269
+            else -> ExploitKind.CVE98260
+        }
         deviceModel = resolveDeviceName()
         refreshStaticStateAsync()
         refreshKsuAsync()
@@ -464,20 +469,22 @@ class MainActivity : ComponentActivity() {
                     item {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column {
-                                SwitchPreference(
-                                    title = "越狱后禁用安全弹窗",
-                                    checked = antiRootGuard,
-                                    onCheckedChange = { updateAntiRootGuard(it) },
-                                    startAction = {
-                                        Icon(
-                                            imageVector = Icons.Filled.NotificationsOff,
-                                            contentDescription = null,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            tint = COUITheme.colorScheme.onBackground
-                                        )
-                                    }
-                                )
-                                HorizontalDivider()
+                                if (exploit != ExploitKind.CVE2505A) {
+                                    SwitchPreference(
+                                        title = "越狱后禁用安全弹窗",
+                                        checked = antiRootGuard,
+                                        onCheckedChange = { updateAntiRootGuard(it) },
+                                        startAction = {
+                                            Icon(
+                                                imageVector = Icons.Filled.NotificationsOff,
+                                                contentDescription = null,
+                                                modifier = Modifier.padding(end = 6.dp),
+                                                tint = COUITheme.colorScheme.onBackground
+                                            )
+                                        }
+                                    )
+                                    HorizontalDivider()
+                                }
                                 SwitchPreference(
                                     title = "越狱后软重启",
                                     checked = softRebootAfter,
@@ -491,34 +498,36 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 )
-                                HorizontalDivider()
-                                SwitchPreference(
-                                    title = "越狱后卸载内核安全防护",
-                                    checked = unloadGuard,
-                                    onCheckedChange = { updateUnloadGuard(it) },
-                                    startAction = {
-                                        Icon(
-                                            imageVector = Icons.Filled.RemoveModerator,
-                                            contentDescription = null,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            tint = COUITheme.colorScheme.onBackground
-                                        )
-                                    }
-                                )
-                                HorizontalDivider()
-                                SwitchPreference(
-                                    title = "SUSFS 支持",
-                                    checked = susfsSupport,
-                                    onCheckedChange = { updateSusfsSupport(it) },
-                                    startAction = {
-                                        Icon(
-                                            imageVector = Icons.Filled.Extension,
-                                            contentDescription = null,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            tint = COUITheme.colorScheme.onBackground
-                                        )
-                                    }
-                                )
+                                if (exploit != ExploitKind.CVE2505A) {
+                                    HorizontalDivider()
+                                    SwitchPreference(
+                                        title = "越狱后卸载内核安全防护",
+                                        checked = unloadGuard,
+                                        onCheckedChange = { updateUnloadGuard(it) },
+                                        startAction = {
+                                            Icon(
+                                                imageVector = Icons.Filled.RemoveModerator,
+                                                contentDescription = null,
+                                                modifier = Modifier.padding(end = 6.dp),
+                                                tint = COUITheme.colorScheme.onBackground
+                                            )
+                                        }
+                                    )
+                                    HorizontalDivider()
+                                    SwitchPreference(
+                                        title = "SUSFS 支持",
+                                        checked = susfsSupport,
+                                        onCheckedChange = { updateSusfsSupport(it) },
+                                        startAction = {
+                                            Icon(
+                                                imageVector = Icons.Filled.Extension,
+                                                contentDescription = null,
+                                                modifier = Modifier.padding(end = 6.dp),
+                                                tint = COUITheme.colorScheme.onBackground
+                                            )
+                                        }
+                                    )
+                                }
                                 if (exploit == ExploitKind.CVE98260) {
                                     HorizontalDivider()
                                     SwitchPreference(
@@ -1244,6 +1253,18 @@ class MainActivity : ComponentActivity() {
                     addLog("No privileged backend (Stellar/Shizuku) running")
                     return@launch
                 }
+                val (alreadyActive, alreadySelinux) = readDeviceState()
+                if (exploit == ExploitKind.CVE2505A && alreadyActive) {
+                    exit = 0
+                    success = true
+                    withContext(Dispatchers.Main) {
+                        ksuActive = true
+                        selinuxText = alreadySelinux
+                    }
+                    addLog("ALREADY_LOADED: kernelsu present; skip exploit/load")
+                    if (!softReboot) withContext(Dispatchers.Main) { launchManager() }
+                    return@launch
+                }
                 val ksudPreflight = PrivService.newProcess(
                     arrayOf("sh", "-c",
                         "[ -n \"$(pm path '${manager.pkg}' 2>/dev/null)\" ] || [ -x /data/adb/ksu/bin/ksud ] || [ -x /data/adb/ksud ]"),
@@ -1260,6 +1281,7 @@ class MainActivity : ComponentActivity() {
                 val cmd = when (exploit) {
                     ExploitKind.CVE98260 -> arrayOf("$dir/t98260", "run")
                     ExploitKind.CVE61269 -> arrayOf("$dir/t61269", "run")
+                    ExploitKind.CVE2505A -> arrayOf("$dir/v2505a_run.sh", manager.pkg)
                 }
                 val rc = runStreaming(cmd, dir)
                 exit = rc
@@ -1297,9 +1319,10 @@ class MainActivity : ComponentActivity() {
         val common = when (exploit) {
             ExploitKind.CVE98260 -> listOf("t98260")
             ExploitKind.CVE61269 -> listOf("t61269")
+            ExploitKind.CVE2505A -> listOf("v2505a_run.sh", "v2505a_plant")
         }
         val extra = mutableListOf<Pair<String, String>>()
-        if (susfsSupport) {
+        if (susfsSupport && exploit != ExploitKind.CVE2505A) {
             val susfs = if (exploit == ExploitKind.CVE61269) {
                 "susfs_guard_lkm-6.12.ko"
             } else {
@@ -1419,7 +1442,8 @@ class MainActivity : ComponentActivity() {
 
     private enum class ExploitKind(val fullLabel: String) {
         CVE98260("CVE-2026-98260-6.18"),
-        CVE61269("CVE-2026-98260-6.12")
+        CVE61269("CVE-2026-98260-6.12"),
+        CVE2505A("CVE-2026-98260-vivo-V2505A")
     }
 
     private enum class ManagerKind(val fullLabel: String, val pkg: String, val manager: String) {
@@ -1432,5 +1456,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val REQ_SHIZUKU = 1001
+        private const val V2505A_KERNEL_RELEASE =
+            "6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k"
     }
 }
