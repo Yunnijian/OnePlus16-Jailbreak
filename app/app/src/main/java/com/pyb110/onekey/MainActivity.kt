@@ -484,22 +484,22 @@ class MainActivity : ComponentActivity() {
                                         }
                                     )
                                     HorizontalDivider()
-                                }
-                                SwitchPreference(
-                                    title = "越狱后软重启",
-                                    checked = softRebootAfter,
-                                    onCheckedChange = { updateSoftRebootAfter(it) },
-                                    startAction = {
-                                        Icon(
-                                            imageVector = Icons.Filled.RestartAlt,
-                                            contentDescription = null,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            tint = COUITheme.colorScheme.onBackground
-                                        )
-                                    }
-                                )
-                                if (exploit != ExploitKind.CVE2505A) {
+                                    SwitchPreference(
+                                        title = "越狱后软重启",
+                                        checked = softRebootAfter,
+                                        onCheckedChange = { updateSoftRebootAfter(it) },
+                                        startAction = {
+                                            Icon(
+                                                imageVector = Icons.Filled.RestartAlt,
+                                                contentDescription = null,
+                                                modifier = Modifier.padding(end = 6.dp),
+                                                tint = COUITheme.colorScheme.onBackground
+                                            )
+                                        }
+                                    )
                                     HorizontalDivider()
+                                }
+                                if (exploit != ExploitKind.CVE2505A) {
                                     SwitchPreference(
                                         title = "越狱后卸载内核安全防护",
                                         checked = unloadGuard,
@@ -514,20 +514,20 @@ class MainActivity : ComponentActivity() {
                                         }
                                     )
                                     HorizontalDivider()
-                                    SwitchPreference(
-                                        title = "SUSFS 支持",
-                                        checked = susfsSupport,
-                                        onCheckedChange = { updateSusfsSupport(it) },
-                                        startAction = {
-                                            Icon(
-                                                imageVector = Icons.Filled.Extension,
-                                                contentDescription = null,
-                                                modifier = Modifier.padding(end = 6.dp),
-                                                tint = COUITheme.colorScheme.onBackground
-                                            )
-                                        }
-                                    )
                                 }
+                                SwitchPreference(
+                                    title = "SUSFS 支持",
+                                    checked = susfsSupport,
+                                    onCheckedChange = { updateSusfsSupport(it) },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Extension,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
                                 if (exploit == ExploitKind.CVE98260) {
                                     HorizontalDivider()
                                     SwitchPreference(
@@ -1322,8 +1322,8 @@ class MainActivity : ComponentActivity() {
             ExploitKind.CVE2505A -> listOf("v2505a_run.sh", "v2505a_plant")
         }
         val extra = mutableListOf<Pair<String, String>>()
-        if (susfsSupport && exploit != ExploitKind.CVE2505A) {
-            val susfs = if (exploit == ExploitKind.CVE61269) {
+        if (susfsSupport) {
+            val susfs = if (exploit == ExploitKind.CVE61269 || exploit == ExploitKind.CVE2505A) {
                 "susfs_guard_lkm-6.12.ko"
             } else {
                 "susfs_guard_lkm.ko"

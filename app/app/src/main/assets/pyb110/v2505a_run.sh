@@ -106,6 +106,17 @@ if [ "$LATE_OK" = "1" ] && grep -qi '^kernelsu ' /proc/modules; then
     log "KSUD_INSTALL_RC=$?"
     su -c id
     log "SU_RC=$?"
+    if [ "${PYB110_SUSFS:-0}" = "1" ] && [ -f "$DIR/susfs_guard_lkm-6.12.ko" ] && [ ! -d /sys/module/susfs_guard_lkm ]; then
+        su -c "'$KSUD' insmod '$DIR/susfs_guard_lkm-6.12.ko'" >/dev/null 2>&1
+        if [ ! -d /sys/module/susfs_guard_lkm ]; then
+            su -c "insmod '$DIR/susfs_guard_lkm-6.12.ko'" >/dev/null 2>&1
+        fi
+        if [ -d /sys/module/susfs_guard_lkm ]; then
+            log "SUSFS_LOADED=1"
+        else
+            log "SUSFS_LOADED=0"
+        fi
+    fi
     log "V2505A_HOLDER_PID=$PLANT_PID"
     log "V2505A_LATE_LOAD_OK"
     exit 0
