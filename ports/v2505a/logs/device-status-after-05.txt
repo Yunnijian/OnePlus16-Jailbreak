@@ -1,0 +1,22 @@
+Device: vivo V2505A / PD2505
+Build: PD2505B_A_16.0.24.7.W10
+Kernel: 6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k
+
+$ su -c id
+uid=0(root) gid=0(root) groups=0(root) context=u:r:ksu:s0
+SU_RC=0
+
+$ su -c "cat /proc/self/attr/current; getenforce; lsmod | grep -i kernelsu; uname -r"
+u:r:ksu:s0
+Enforcing
+kernelsu              221184  1
+6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k
+
+Clean boot baseline before the successful run:
+- getenforce: Enforcing
+- su: absent
+- kernelsu: not loaded
+
+Post-verification note:
+- The local ADB log pipe was closed; no v2505a, yexec, or t61269 process remained.
+- su and the loaded kernelsu module still worked afterward.

