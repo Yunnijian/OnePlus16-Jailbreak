@@ -13,6 +13,38 @@ SELinux=Enforcing
 全程未修改或刷写 `vendor_boot`，重启后临时 root 和本次内核改动都会消失。
 当前设备停在已加载 KernelSU 的状态；如需恢复干净环境，直接重启即可。
 
+## App 集成
+
+V2505A 已作为第三个独立入口合入 App，不复用 `t98260`、`t61269`：
+
+- `ExploitKind.CVE2505A` 只在厂商为 `vivo` 且内核完整 release
+  等于 `6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k`
+  时自动选择。
+- 部署内容只有 `v2505a_run.sh` 和 `v2505a_plant`。
+- `v2505a_run.sh` 使用自己的 `ALREADY_LOADED` 和失败重试语义；失败的
+  plant 会转成 holder 保留现场，脚本跳过 holder，同一 boot 可直接重试。
+- V2505A 入口隐藏不适用的反 root、卸载防护、SUSFS 和 VFS 开关。
+
+当前构建产物：
+
+```text
+app/Shark-1.91-v2505a-debug.apk
+69425674 B
+SHA-256 B783AACD61D42E073887D4B69CE317A36AE5CB0F216981EBED3A27F0956B958C
+```
+
+构建验证已完成：
+
+```text
+:app:assembleDebug
+BUILD SUCCESSFUL
+```
+
+已检查 APK 内含 `assets/pyb110/v2505a_plant`、`v2505a_run.sh`
+和更新后的 `assets/manual.md`。当前 V2505A 设备上启动 App 后，
+信息卡会自动显示 `CVE-2026-98260-vivo-V2505A`。
+完整提权流程由用户从干净 boot 自行实测。
+
 ## 目标设备
 
 - 型号：`vivo V2505A / PD2505`
@@ -149,8 +181,8 @@ adb -s 10AG1S2Y6D005Z0 shell "su -c 'lsmod | grep -i kernelsu; getenforce'"
 
 ## 注意事项
 
-- UAF 写入具有概率性。任何 stage 失败后不要在同一 boot 中强行重复完整链路
-  或主动 reap stale holder；重启后再试。
+- UAF 写入具有概率性。任何 stage 失败后都可等 plant 转成 holder 后在同一 boot
+  直接重试；不要主动 kill 或 reap holder。
 - 不要刷分区或修改 `vendor_boot`。本方案只做运行时内核内存写。
 - 每次重启后 KASLR、SELinux、`vr.ko` 状态都会恢复，必须重新运行完整链路。
 - KernelSU 包路径包含随机目录，不要硬编码旧路径。

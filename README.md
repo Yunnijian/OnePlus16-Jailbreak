@@ -2,24 +2,25 @@
 
 OnePlus 16（PYB110）一键越狱工具。
 
-在 **OnePlus 16（PYB110，SM8950，Android 17 / ColorOS，内核 `6.18.21-android17-5-gf957accaf563-ab15926176-4k`）** 上，通过 **CVE-2026-98260-6.18** / **CVE-2026-98260-6.12** 提权，并加载 **内核态 root（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）** 的一键工具与源码。
+在 **OnePlus 16（PYB110，SM8950，Android 17 / ColorOS，内核 `6.18.21-android17-5-gf957accaf563-ab15926176-4k`）**、**欧真加 6.12.69 设备**和 **vivo V2505A** 上，通过 **CVE-2026-98260** 提权，并加载 **内核态 root（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra）** 的一键工具与源码。
 
-设备未解锁 BL，起手只有 adb shell（uid 2000）。工具通过 Stellar（默认）或 Shizuku 以 shell 身份驱动设备端 exploit，最终加载按本机 GKI 6.18.21 自编的 LKM：6.18 与 6.12 两条 98260 分支都走 `ksud late-load`，不再内置 KernelSU LKM、不再使用 `insmod` 回退。
+设备未解锁 BL，起手只有 adb shell（uid 2000）。工具通过 Stellar（默认）或 Shizuku 以 shell 身份驱动设备端 exploit，最终按入口加载对应 LKM：三条 98260 分支都走 `ksud late-load`，不再内置 KernelSU LKM、不再使用 `insmod` 回退。
 
 > 仅用于自有设备的系统研究。存在竞态与重启风险，详见「风险」一节。
 
 ## 当前状态
 
-- **两个分支可选**：默认 `CVE-2026-98260-6.18`，使用单入口 Rust 工具 `t98260`（内嵌现有 C plant：exec + POSIX 定时器 UAF、假 cred 指针写；cred 子进程一次性 late-load，无 rootd）；`CVE-2026-98260-6.12` 同样是 Rust 单入口 `t61269`（无 rootd，结构与 `t98260` 一致）。两条都只走 `ksud late-load`。
+- **三个独立入口**：`CVE-2026-98260-6.18` 使用单入口 Rust 工具 `t98260`；`CVE-2026-98260-6.12` 使用 Rust 单入口 `t61269`；`CVE-2026-98260-vivo-V2505A` 使用独立 `v2505a_plant` / `v2505a_run.sh`，不复用前两条工具，并额外处理 vivo `vr.ko` 的 `sys_exit` tracepoint。三条都只走 `ksud late-load`。
 - **KernelSU（官方 main，UAPI6）**：LKM 按 `main` `db6263d3`（`v3.3.1-27-gdb6263d3`，versionCode 32707）用本机 6.18.21 GKI 重编，382,232 B、229 个 UNDEF 全部能由 `syms.txt` 解析，真机验证通过；ksud 同版本（6,618,008 B，uapi 6）。管理器需用同版本的 `KernelSU_v3.3.1-27-gdb6263d3_32707-release.apk`（与旧版 32680 同签名，`adb install -r` 直接覆盖）；旧管理器的 supercall 仍可用，但没有 UAPI6 的模块 preinit 等新特性。注意 UAPI6 的 ksud 必须配 UAPI6 LKM（ksud 启动会校验），不能与旧 5 版 LKM 混用。
 - **BakaSU（原 ReSukiSU）**：LKM/ksud/管理器对齐上游 `35253`（`v4.2.0-rc3` 之后 `5785bdb8`，`4.2.0-rc3-82`，uapi 6），LKM 435,616 B；管理器与 35252 同签名可直接 `adb install -r` 覆盖（35252 已真机验证，35253 为版本同步）。
 - **FinaSU（v1.3.2 最新）**：按 `master` `9b32bde4` 重编 LKM 496,744 B（UNDEF 232 全命中）、ksud 7,561,328 B（uapi 6），管理器 v1.3.2（33090）；使用 `KSU_DYNAMIC_MANAGER` 动态签名（`ksud dynamic set-apk`）。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；管理器由用户安装，App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（目标 6.12.69）**：Rust 单入口 `t61269`（内嵌 `YuKongA/CVE-2026-98260` `timer.c` 的本仓库改造版 `exploit/src/t61269_plant.c`）。v1.68 起与 6.18 全面对齐：**rootd / `t61269_su` / `run612.sh` 已删除**，进程内 preflight → UAF fake cred → cred 子进程一次性 `ksud late-load --kmi android16-6.12` 后 park，收尾由同一套并行 `finish_manager` 完成，失败出口/同 boot 重跑语义一致（差别见 6.12 小节）。旧链路曾在 PLZ110 用 SukiSU 41100 跑通；单入口版需在 6.12.69 设备复测。
-- App 为底部三 tab（首页/日志/历史，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21→6.18、6.12.69→6.12），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享）；release 签名 APK v1.91 已构建（6,547,292 B，md5 `2b81b5c48c01df25d78189b55a8d0f32`）。
+- **CVE-2026-98260-vivo-V2505A**：`vivo V2505A / PD2505`、`PD2505B_A_16.0.24.7.W10`、内核 `6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k` 的独立入口。复现方法、常量、payload 校验和完整验证日志见 `ports/v2505a/README.md`；当前只在 KernelSU 上完成实机验证。UAF 阶段失败后由 holder 保留现场，同一 boot 可直接重试。
+- App 为底部三 tab（首页/日志/历史，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21→6.18、6.12.69→6.12、精确匹配的 vivo V2505A 内核→V2505A），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享）；release 签名 APK v1.91 已构建（6,547,292 B，md5 `2b81b5c48c01df25d78189b55a8d0f32`）。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
-- **内置范围**：APK 只内置 6.18 单入口 `t98260`、6.12 单入口 `t61269`、两个 SUSFS ko 与 6.18 的 `hybridmount-6.18.21.ko`（`assets/pyb110` 约 8 MB，release APK 约 6.3 MB）；**不再内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
+- **内置范围**：APK 内置 6.18 单入口 `t98260`、6.12 单入口 `t61269`、V2505A 的 `v2505a_plant` / `v2505a_run.sh`、两个 SUSFS ko 与 6.18 的 `hybridmount-6.18.21.ko`；**不内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
 ## 截图
 
@@ -56,7 +57,8 @@ OnePlus 16（PYB110）一键越狱工具。
 │   3 等 KSU / su → ksud install                │
 │   4 SUSFS / 截图恢复 / 管理器拉起 并行收尾     │
 │  98260 6.12：t61269（Rust 单入口）           │
-│  两条都从已安装管理器 APK 原地执行 ksud；      │
+│  V2505A：v2505a_plant + v2505a_run.sh         │
+│  三条都从已安装管理器 APK 原地执行 ksud；      │
 │  不再部署 ksu-base*.ko / syms / prep_* /      │
 │  forker / take_slide / t64560_*               │
 └───────────────┬───────────────────────────────┘
@@ -95,7 +97,7 @@ OnePlus 16（PYB110）一键越狱工具。
 
 **两个分支共用**
 
-- **截图链路恢复**：两条分支在 `ksud install` 后检查 `com.oplus.exsystemservice` 与 `com.oplus.screenshot`，发现被禁用（旧版逻辑或手动误禁）就 `pm enable --user 0` 恢复，日志 `SCREENSHOT_STACK_OK/ENABLED/ABSENT/SKIP`；已启用时只做检查，不影响截图链路与收尾时停 `riskdetect`。
+- **截图链路恢复**：6.18 / 6.12.69 两条分支在 `ksud install` 后检查 `com.oplus.exsystemservice` 与 `com.oplus.screenshot`，发现被禁用（旧版逻辑或手动误禁）就 `pm enable --user 0` 恢复，日志 `SCREENSHOT_STACK_OK/ENABLED/ABSENT/SKIP`；已启用时只做检查，不影响截图链路与收尾时停 `riskdetect`。
 - **反 root 守卫**：ColorOS 的 `com.oplus.exsystemservice` 会在检测到提权后弹窗并在 15 秒后 `reboot("Malicious app try to root devices")`。可选开关开启时，61269 在 `PLANT_OK` 后立刻后台启动守卫（轮询 `su -c 'stop riskdetect'`）；98260 不再提前起 su 守卫（v1.55 移除，避免 root 尚未稳定时的 su 调用与 late-load 抢时序），只在 su 可用后 `wait_su` 阶段做一次 `su -c stop riskdetect`（日志 `ANTIROOT_STOP_RC/STATE`）。目标是上游 AIDL HAL `vendor.oplus.hardware.riskdetect.IRiskDetect/default`，**不自动恢复，重启后恢复**；不再 disable/kill exsystemservice，因此不会拆掉同 host 里的 `OplusScreenshotManagerService`，截图链路不受影响。
 
 ## 目录结构
@@ -136,7 +138,7 @@ OnePlus16-Jailbreak/
 └── LICENSE                      MIT（本项目自研代码）
 ```
 
-> 两条分支都由本仓库 Rust 入口 + [exploit/src](exploit/src) 的 C plant 核心链接成单一 ELF（`t98260` / `t61269`）。设备端只部署单入口 + 可选 SUSFS ko；ksud 不打包，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。来源与许可见 `NOTICE` 与下文。
+> 前两条分支由本仓库 Rust 入口 + [exploit/src](exploit/src) 的 C plant 核心链接成单一 ELF（`t98260` / `t61269`）；V2505A 使用独立 `v2505a_plant` / `v2505a_run.sh`。设备端只部署当前入口所需文件；ksud 不打包，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。来源与许可见 `NOTICE` 与下文。
 
 ## 构建
 
@@ -165,6 +167,7 @@ App 把设备端资产打包在 `app/app/src/main/assets/pyb110/`，运行时不
 
 - 98260 6.18：`t98260`（单入口 Rust + C plant）；
 - 98260 6.12：`t61269`；
+- V2505A：`v2505a_plant` + `v2505a_run.sh`（只在精确匹配的 vivo V2505A 内核上启用）；
 - 可选：`susfs_guard_lkm.ko` / `susfs_guard_lkm-6.12.ko`；
 - 可选（仅 6.18）：`hybridmount-6.18.21.ko`（Hybrid Mount 的 VFS provider）；
 - 不部署 ksud：运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。
@@ -199,7 +202,7 @@ bash lkm/build-sukisu.sh
 bash lkm/build-susfs.sh
 ```
 
-两条 98260 分支都只走 `ksud late-load`；LKM 由 ksud 内嵌提供，App 不再部署 KernelSU ko/ksud，也不再有 `insmod` 回退。管理器与 ksud 建议直接用官方 release / CI 产物（BakaSU 的 `Manager-release` 与 `ksud`），不要在本地重复编译。
+三条 98260 分支都只走 `ksud late-load`；LKM 由 ksud 内嵌提供，App 不再部署 KernelSU ko/ksud，也不再有 `insmod` 回退。管理器与 ksud 建议直接用官方 release / CI 产物（BakaSU 的 `Manager-release` 与 `ksud`），不要在本地重复编译。
 
 `lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `28b2e85`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall、hide_syms 以及 sus_map 的间接 show 入口都换成了 syscall / seq_operations wrapper（并适配上游新增的 `/proc/susfs_map` 规则节点）；`sus_map` 只对 KernelSU 会 umount 的 app 生效，`su` 授予 root 的进程不隐藏。规则矩阵与工具在 `lkm/susfs-tools/`。构建产物已内置到 App：开启「SUSFS 支持」开关后，越狱成功的流程末尾会自动把它部署到设备并 `ksud insmod`。
 
@@ -215,12 +218,12 @@ cargo build --release --target aarch64-linux-android
 cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb110/t98260
 ```
 
-`t98260 run` / `t61269 run` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu` / `finasu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）、`PYB110_SUSFS`（`1` / `0`）与 `PYB110_VFS`（`1` / `0`，仅 6.18 分支）选择行为；测试钩子 `PYB110_FORCE_FAIL=cred` 强制失败；两条都只走 `ksud late-load`。
+`t98260 run` / `t61269 run` 从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu` / `finasu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）、`PYB110_SUSFS`（`1` / `0`）与 `PYB110_VFS`（`1` / `0`，仅 6.18 分支）选择行为；测试钩子 `PYB110_FORCE_FAIL=cred` 强制失败。V2505A 使用同一部署目录，由 `v2505a_run.sh` 解析管理器 APK 内的 ksud；失败后的 plant 会转成 holder，同一 boot 可直接重试。
 
 ## 使用
 
 1. 用无线调试启动 Shizuku，并授权本 App。
-2. **先安装所选管理器的 APK**（ksud 运行时从它的 `lib/arm64` 原地执行，不再随包提供）；再在「ROOT管理器」下拉选择 KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra；漏洞利用方式不再手选，App 按内核自动选（6.18.21→CVE-2026-98260-6.18，6.12.69→CVE-2026-98260-6.12）。App 会在启动前检查管理器是否已安装。
+2. **先安装所选管理器的 APK**（ksud 运行时从它的 `lib/arm64` 原地执行，不再随包提供）；再在「ROOT管理器」下拉选择 KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra；漏洞利用方式不再手选，App 按内核自动选（6.18.21→CVE-2026-98260-6.18，6.12.69→CVE-2026-98260-6.12，vivo V2505A 精确内核→独立 V2505A 入口）。App 会在启动前检查管理器是否已安装。
 3. 98260 建议在干净开机后执行：`t98260 run` 会先 probe 内核 release 与 trace 通道；plant 通常几秒内到 cred-ready（SELinux 首次命中受 spray 影响，预算 240 秒）。
 4. 「拓展功能」页内的开关（VFS 仅 6.18 设备显示）：
    - 「越狱后禁用安全弹窗」（默认开启）：拿到 su 后停止 `riskdetect` HAL（`stop riskdetect`），不自动恢复、重启后恢复；不触碰 `com.oplus.exsystemservice`/截图服务。
@@ -236,7 +239,8 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb
 - **换管理器必须重启**：`rmmod kernelsu` 会被模块自身的 kprobe/tracepoint 引用计数挡住（EAGAIN）；强制卸载会撞上 `file_wrapper` 未反注册导致 kpanic。
 - **KernelSU Next** 尚未做实机加载验证。
 - **必须先安装管理器**：ksud 不随 APK 内置，6.18/6.12 都从管理器 APK 的 `lib/arm64` 原地执行；管理器未安装时 App 会在 plant 之前拒绝启动。
-- **98260 只适配 6.18.21**：`t98260 run` 会先 probe 完整内核 release 与 trace 通道，不匹配直接退出；依赖 `/sys/kernel/tracing`，建议干净开机后执行。
+- **V2505A 是独立分支**：只匹配 `6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k` 和 `vivo` 厂商；当前只在 KernelSU 实机验证。UAF 失败后 holder 会保留现场，同一 boot 可直接重试。
+- **98260 6.18 / 6.12.69**：`t98260` / `t61269` 会 probe 内核 release 与 trace 通道，不匹配直接退出；依赖 `/sys/kernel/tracing`，建议干净开机后执行。
 - **98260 的假 cred 只替换 `task->cred`**：plant 进程内 `/proc/self/status` 的 `CapEff` 读的是 `real_cred`，显示 0 属正常；以 `su` 子进程为准。
 - **两条分支都已删除 rootd**：fake-cred 子进程执行完 late-load 后原地 park，父进程同样 park 持页；没有 socket、没有退役连接、没有 0666 暴露。
 - App 依赖 Stellar（默认）或 Shizuku 服务；重启后需重新启动对应服务。
@@ -244,8 +248,8 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb
 
 ## 风险
 
-- CVE-2026-98260 是竞态 UAF，任何一次运行都可能导致内核 panic / 重启；失败后必须冷启动再试。
-- 两条分支都已无 rootd。
+- CVE-2026-98260 是竞态 UAF，任何一次运行都可能导致内核 panic / 重启。
+- 6.18 与 6.12.69 两条分支都已无 rootd；V2505A 使用独立 shell 驱动，失败后由 holder 保留现场，可在同一 boot 直接重试。
 - 本工具仅用于**自有设备**的系统研究与 root 管理；请勿用于未授权设备。
 - 使用 root 与内核模块存在数据损坏、保修失效等风险，风险自负。
 
