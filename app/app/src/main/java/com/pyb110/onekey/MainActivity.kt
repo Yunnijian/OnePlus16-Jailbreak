@@ -1274,12 +1274,15 @@ class MainActivity : ComponentActivity() {
                     addLog("Manager not installed: ${manager.pkg}. Install the manager APK first; ksud is executed from its APK, no bundled copy.")
                     return@launch
                 }
-                val dir = deployDir()
-                addLog("Deploying tools to $dir ...")
-                stageAssets(dir, deployPlan())
+                val nativeDir = applicationInfo.nativeLibraryDir
+                val dir = if (exploit == ExploitKind.CVE98260) nativeDir else deployDir()
+                if (exploit != ExploitKind.CVE98260) {
+                    addLog("Deploying tools to $dir ...")
+                    stageAssets(dir, deployPlan())
+                }
                 addLog("Starting ${exploit.fullLabel}")
                 val cmd = when (exploit) {
-                    ExploitKind.CVE98260 -> arrayOf("$dir/t98260", "run")
+                    ExploitKind.CVE98260 -> arrayOf("$nativeDir/libt98260.so", "run")
                     ExploitKind.CVE61269 -> arrayOf("$dir/t61269", "run")
                     ExploitKind.CVE2505A -> arrayOf("$dir/v2505a_run.sh", manager.pkg)
                 }
@@ -1317,21 +1320,18 @@ class MainActivity : ComponentActivity() {
 
     private fun deployPlan(): List<Pair<String, String>> {
         val common = when (exploit) {
-            ExploitKind.CVE98260 -> listOf("t98260")
+            ExploitKind.CVE98260 -> listOf<String>()
             ExploitKind.CVE61269 -> listOf("t61269")
             ExploitKind.CVE2505A -> listOf("v2505a_run.sh", "v2505a_plant")
         }
         val extra = mutableListOf<Pair<String, String>>()
-        if (susfsSupport) {
+        if (susfsSupport && exploit != ExploitKind.CVE98260) {
             val susfs = if (exploit == ExploitKind.CVE61269 || exploit == ExploitKind.CVE2505A) {
                 "susfs_guard_lkm-6.12.ko"
             } else {
                 "susfs_guard_lkm.ko"
             }
             extra.add(susfs to susfs)
-        }
-        if (vfsSupport && exploit == ExploitKind.CVE98260) {
-            extra.add("hybridmount-6.18.21.ko" to "hybridmount-6.18.21.ko")
         }
         return common.map { it to it } + extra
     }
@@ -1388,10 +1388,12 @@ class MainActivity : ComponentActivity() {
             if (rc != 0) addLog("Deploy failed $target rc=$rc") else addLog("Deployed $target (${copied} B)")
         }
 
-        PrivService.newProcess(
-            arrayOf("sh", "-c", "chmod 755 " + files.joinToString(" ") { "'$dir/${it.second}'" }),
-            shizukuEnv(), "/data/local/tmp"
-        ).waitFor()
+        if (files.isNotEmpty()) {
+            PrivService.newProcess(
+                arrayOf("sh", "-c", "chmod 755 " + files.joinToString(" ") { "'$dir/${it.second}'" }),
+                shizukuEnv(), "/data/local/tmp"
+            ).waitFor()
+        }
     }
 
     private fun runStreaming(cmd: Array<String>, dir: String): Int {
@@ -1400,7 +1402,9 @@ class MainActivity : ComponentActivity() {
             "PYB110_UNLOAD_GUARD=${if (unloadGuard) "1" else "0"}" +
             "PYB110_DISABLE_ANTIROOT=${if (antiRootGuard) "1" else "0"}" +
             "PYB110_SUSFS=${if (susfsSupport) "1" else "0"}" +
-            "PYB110_VFS=${if (vfsSupport) "1" else "0"}"
+            "PYB110_VFS=${if (vfsSupport) "1" else "0"}" +
+            "PYB110_SUSFS_KO=${applicationInfo.nativeLibraryDir}/libsusfs_guard_lkm.so" +
+            "PYB110_VFS_KO=${applicationInfo.nativeLibraryDir}/libhybridmount.so"
         val p = PrivService.newProcess(cmd, env, dir)
         val out = p.getInputStream()
         val err = p.getErrorStream()

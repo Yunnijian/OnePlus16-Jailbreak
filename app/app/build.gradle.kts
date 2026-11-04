@@ -52,6 +52,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols.add("**/libt98260.so")
+            keepDebugSymbols.add("**/libsusfs_guard_lkm.so")
+            keepDebugSymbols.add("**/libhybridmount.so")
+        }
+    }
 }
 
 
