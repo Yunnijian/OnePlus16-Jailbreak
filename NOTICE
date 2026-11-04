@@ -1,6 +1,14 @@
 Third-party components
 ======================
 
+Project license
+---------------
+Self-written code in this repository (App, exploit wrappers, build scripts)
+is licensed under GPL-3.0 (see LICENSE). Third-party components below keep
+their own licenses. The vendored kernel-module sources susfs4ksu-lkm and
+hybridmount, and the ko binaries built from them, remain GPL-2.0 as separate
+components.
+
 Note: ksud is not bundled. The App executes the ksud payload
 (manager APK's lib/arm64/libksud.so or the randomized equivalent) in place.
 The manager APK itself is installed by the user.

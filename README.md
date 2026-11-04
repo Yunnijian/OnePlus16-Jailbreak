@@ -135,7 +135,7 @@ OnePlus16-Jailbreak/
 ├── docs/screenshots/            App 与管理器截图
 ├── third_party/                 上游工具与许可（CVE 公开仓库）
 ├── NOTICE                       第三方来源与许可
-└── LICENSE                      MIT（本项目自研代码）
+└── LICENSE                      GPL-3.0（本项目自研代码）
 ```
 
 > 前两条分支由本仓库 Rust 入口 + [exploit/src](exploit/src) 的 C plant 核心链接成单一 ELF（`t98260` / `t61269`）；V2505A 使用独立 `v2505a_plant` / `v2505a_run.sh`。设备端只部署当前入口所需文件；ksud 不打包，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。来源与许可见 `NOTICE` 与下文。
@@ -264,7 +264,8 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/assets/pyb
 - SukiSU Ultra：[SukiSU-Ultra/SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)（GPL-3.0）。
 - SUSFS guard LKM：[inforcqb/susfs4ksu-lkm](https://github.com/inforcqb/susfs4ksu-lkm)（GPL-2.0；源码 vendored 在 `lkm/susfs4ksu-lkm`，BTI 兼容修改见 `MODIFICATIONS.md`）。
 - UI：[COUI](https://github.com/suqi8/coui)（Apache-2.0，Miuix 的 ColorOS 分支）；远程执行：[Shizuku API](https://github.com/RikkaApps/Shizuku-API)（Apache-2.0）。
-- 本项目自研代码（App、exploit 封装、构建脚本）采用 MIT，详见 `LICENSE`；第三方二进制与源码遵循各自许可，详见 `NOTICE`。
+- 本项目自研代码（App、exploit 封装、构建脚本）采用 **GPL-3.0**，详见 `LICENSE`；第三方二进制与源码遵循各自许可，详见 `NOTICE`。
+- 例外：`lkm/susfs4ksu-lkm`、`lkm/hybridmount` 以及由它们构建、随 App 分发的 ko，继续按各自的 **GPL-2.0** 独立分发；`third_party/` 下的 MIT/Apache 材料保留原声明。
 
 ## 校验和
 
