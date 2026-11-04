@@ -25,6 +25,10 @@ out/
 # V2505A local OTA extracts and analysis inputs
 ports/v2505a/.cache/
 ports/v2505a/work/
-ports/v2505a/artifacts/kernel/
-ports/v2505a/artifacts/ota/
+ports/v2505a/artifacts/
+ports/v2505a/bin/
+ports/v2505a/logs/
+ports/v2505a/app/
+ports/v2505a/**/__pycache__/
+ports/v2505a/**/*.py[cod]
 ports/v2505a/tools/vendor/

@@ -22,7 +22,7 @@
 
 ## V2505A 适配
 
-从 OTA 恢复的 `vmlinux-v2505a.elf` 中确认：
+从目标设备 OTA 内核镜像中确认：
 
 ```text
 __tracepoint_sys_exit = 0xffffffc082594840

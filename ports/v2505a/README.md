@@ -2,7 +2,7 @@
 
 ## 状态
 
-已在当前设备完成临时提权验证：
+该移植曾在目标设备完成临时提权验证：
 
 ```text
 uid=0(root) gid=0(root) groups=0(root) context=u:r:ksu:s0
@@ -11,7 +11,8 @@ SELinux=Enforcing
 ```
 
 全程未修改或刷写 `vendor_boot`，重启后临时 root 和本次内核改动都会消失。
-当前设备停在已加载 KernelSU 的状态；如需恢复干净环境，直接重启即可。
+仓库只保留源码、构建脚本和 App 必需的运行资产，不提交验证日志、APK、
+OTA 提取物或本地依赖缓存。
 
 ## App 集成
 
@@ -25,25 +26,17 @@ V2505A 已作为第三个独立入口合入 App，不复用 `t98260`、`t61269`�
   plant 会转成 holder 保留现场，脚本跳过 holder，同一 boot 可直接重试。
 - V2505A 入口隐藏不适用的反 root、卸载防护、SUSFS 和 VFS 开关。
 
-当前构建产物：
-
-```text
-app/Shark-1.91-v2505a-debug.apk
-69425674 B
-SHA-256 B783AACD61D42E073887D4B69CE317A36AE5CB0F216981EBED3A27F0956B958C
-```
-
-构建验证已完成：
+App 构建验证：
 
 ```text
 :app:assembleDebug
 BUILD SUCCESSFUL
 ```
 
-已检查 APK 内含 `assets/pyb110/v2505a_plant`、`v2505a_run.sh`
-和更新后的 `assets/manual.md`。当前 V2505A 设备上启动 App 后，
-信息卡会自动显示 `CVE-2026-98260-vivo-V2505A`。
-完整提权流程由用户从干净 boot 自行实测。
+APK 属于本地构建产物，不纳入版本控制。构建需要仓库内的
+`assets/pyb110/v2505a_plant` 和 `assets/pyb110/v2505a_run.sh`；
+当前 V2505A 设备启动 App 后，信息卡会自动显示
+`CVE-2026-98260-vivo-V2505A`。
 
 ## 目标设备
 
@@ -70,8 +63,8 @@ BUILD SUCCESSFUL
 
 ## 已恢复常量
 
-内核符号和 BTF 来自 OTA 的 `boot.img`。恢复后的 ELF 位于
-`artifacts/kernel/vmlinux-v2505a.elf`。
+内核符号和 BTF 来自 OTA 的 `boot.img`。OTA、解包文件和恢复后的 ELF
+都属于本地分析输入，不纳入版本控制。
 
 ```c
 #define STATIC_TIMER_SITE         0xffffffc0801e0890ULL
@@ -115,16 +108,16 @@ $env:ANDROID_NDK_HOME = "C:\path\to\android-ndk-r28c"
 .\ports\v2505a\build-v2505a.ps1 -Mode Both
 ```
 
-产物：
+本地生成产物：
 
 - `bin/v2505a_probe`：只读探测程序，编译时定义 `PROBE_ONLY`
 - `bin/v2505a_plant`：完整链路，运行时参数为 `fake`
 
-当前产物 SHA-256：
+`bin/` 已被 `.gitignore` 忽略。需要更新 App 内置 payload 时：
 
-```text
-6F8053829A5D9A2D659FE7C02E79B200732618CD24ED67E6869B727CABD03CE2  v2505a_probe
-3902E91058E186E70AD88B5D0D435641E2793C4AC76D80BABAE04F1A66D5746D  v2505a_plant
+```powershell
+Copy-Item .\ports\v2505a\bin\v2505a_plant `
+  .\app\app\src\main\assets\pyb110\v2505a_plant -Force
 ```
 
 ## 运行
@@ -167,17 +160,14 @@ adb -s 10AG1S2Y6D005Z0 shell "su -c id"
 adb -s 10AG1S2Y6D005Z0 shell "su -c 'lsmod | grep -i kernelsu; getenforce'"
 ```
 
-## 实测结果
+## 验证结论
 
-- `logs/probe-05.log`：`PROBE_OK`，KASLR slide
-  `0x1d0b800000`，`vr_sys_exit` funcs 槽
-  `0xffffffdd8dd94888`。
-- `logs/plant-04.log`：干净 boot 上的第一次完整尝试在第三次 UAF 写
-  `fake_uid` 时 burst miss，按保护逻辑驻留，没有继续重复利用。
-- 随后重启清理污染，重新 probe。
-- `logs/plant-05.log`：完整成功，四次 stage 写全部命中；
-  `vr_sys_exit` 零写后子进程未被杀，KernelSU late-load 返回 0。
-- `logs/device-status-after-05.txt`：独立的 `su`、模块与 SELinux 验收。
+- 干净 boot 上 probe 返回 `PROBE_OK`，成功得到 KASLR slide 和
+  `vr_sys_exit` funcs 槽地址。
+- 一次完整运行中四次 stage 写全部命中；`vr_sys_exit` 零写后子进程未被杀，
+  KernelSU late-load 返回 0。
+- 独立执行 `su -c id`、模块检查和 SELinux 检查，均符合预期。
+- 受控失败流程不会写入 dirty 标记；plant 转成 holder 后可在同一 boot 重试。
 
 ## 注意事项
 
@@ -193,9 +183,6 @@ adb -s 10AG1S2Y6D005Z0 shell "su -c 'lsmod | grep -i kernelsu; getenforce'"
 ports/v2505a/
 ├── README.md
 ├── build-v2505a.ps1
-├── artifacts/kernel/vmlinux-v2505a.elf
-├── bin/{v2505a_probe,v2505a_plant}
-├── logs/
 ├── reference/README.md
 └── tools/
     ├── btf_inspect.py
@@ -204,3 +191,6 @@ ports/v2505a/
     ├── unpack_bootimg.py
     └── zstd_unwrap.py
 ```
+
+本地生成的 `bin/`、`artifacts/`、`logs/`、`app/`、`work/`、
+`tools/vendor/` 和 Python 缓存都已忽略，不提交到仓库。
