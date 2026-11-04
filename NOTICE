@@ -9,10 +9,12 @@ their own licenses. The vendored kernel-module sources susfs4ksu-lkm and
 hybridmount, and the ko binaries built from them, remain GPL-2.0 as separate
 components.
 
-Note: ksud is not bundled. The App executes the ksud payload
-(manager APK's lib/arm64/libksud.so or the randomized equivalent) in place.
-The manager APK itself is installed by the user.
-
+Supported managers (not bundled)
+--------------------------------
+KernelSU, KernelSU Next, FinaSU, BakaSU and SukiSU Ultra are supported as
+externally installed managers. The App executes the ksud payload from the
+user-installed manager APK in place; no manager LKM, source, or ksud binary
+is distributed by this repository.
 
 1. CVE-2026-64560 public tooling
    Source: https://github.com/Feng1586/CVE-2026-64560-public
@@ -20,59 +22,34 @@ The manager APK itself is installed by the user.
    Used: historical source/flow reference only. The 64560 chain and its
          binaries are no longer packed or deployed by the App.
 
-2. KernelSU
-   Source: https://github.com/tiann/KernelSU
-   License: GPL-2.0
-   Used: LKM source at build time; ksud and manager are distributed by upstream.
-
-3. KernelSU Next
-   Source: https://github.com/rifsxd/KernelSU-Next
-   License: GPL-2.0
-   Used: LKM source at build time; ksud / manager are upstream artifacts.
-
-4. BakaSU (formerly ReSukiSU)
-   Source: https://github.com/Baka-SU/BakaSU
-   License: GPL-2.0
-   Used: LKM source at build time; ksud / Manager-release are official CI artifacts.
-
-5. SukiSU Ultra
-   Source: https://github.com/SukiSU-Ultra/SukiSU-Ultra
-   License: GPL-3.0
-   Used: LKM source at build time; ksud / manager are upstream release artifacts.
-
-6. Miuix
+2. Miuix
    Source: https://github.com/miuix-kotlin-multiplatform/miuix
    License: Apache-2.0
    Used: Compose UI components.
 
-7. CVE-2026-98260 OnePlus 16 (PYB110) temporary root kit
+3. CVE-2026-98260 OnePlus 16 (PYB110) temporary root kit
    Source: https://github.com/AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak
    License: MIT
    Used: background and flow reference for the 98260 branch. The bundled
          t98260 single-entry binary is built from exploit/rust-t98260 plus
-         the C plant in exploit/src in this repository. License text:
+         the C plant in exploit/src in this repository and shipped as
+         lib/arm64-v8a/libt98260.so. License text:
          third_party/cve-2026-98260-LICENSES/AzirX1337-MIT.txt
 
-8. Shizuku API
+4. Shizuku API
    Source: https://github.com/RikkaApps/Shizuku-API
    License: Apache-2.0
    Used: remote process execution.
 
-9. SUSFS guard LKM (susfs4ksu-lkm)
-   Source: https://github.com/inforcqb/susfs4ksu-lkm (commit b69dee4)
+5. SUSFS guard LKM (susfs4ksu-lkm)
+   Source: https://github.com/inforcqb/susfs4ksu-lkm (baseline b69dee4, rebased to 28b2e85)
    License: GPL-2.0 (full text: lkm/susfs4ksu-lkm/LICENSE)
    Used: vendored SUSFS loadable kernel module source under
          lkm/susfs4ksu-lkm/. Local modifications for BTI kernels are listed in
-         lkm/susfs4ksu-lkm/MODIFICATIONS.md.
+         lkm/susfs4ksu-lkm/MODIFICATIONS.md. The 6.12 build is shipped as
+         assets/pyb110/susfs_guard_lkm-6.12.ko.
 
-The application icon is drawn by this project.
-
-10. FinaSU
-   Source: https://github.com/LyraVoid/FinaSU
-   License: GPL-2.0
-   Used: LKM source at build time; ksud / manager are upstream release artifacts.
-
-11. YuKongA/CVE-2026-98260 (6.12.69-ex branch)
+6. YuKongA/CVE-2026-98260 (6.12.69-ex branch)
    Source: https://github.com/YuKongA/CVE-2026-98260
    License: none declared upstream (repository has no LICENSE file).
    Used: timer.c modified with this project's fast-tuning and bundled as
@@ -80,25 +57,27 @@ The application icon is drawn by this project.
          Redistribution is NOT cleared by the upstream author; treat this
          binary as a local research build until a license/permission exists.
 
-12. Stellar (Shizuku fork) / Stellar API SDK
+7. Stellar (Shizuku fork) / Stellar API SDK
    Source: https://github.com/roro2239/Stellar (manager),
            https://github.com/roro2239/Stellar-API (SDK, JitPack com.github.roro2239:Stellar-API:1.0.3)
    License: MPL-2.0 (Stellar modifications) / Apache-2.0 (Shizuku base code).
    Used: privileged backend preferred at runtime (StellarProvider + roro.stellar API);
-         Shizuku (entry 8) remains the fallback backend.
+         Shizuku (entry 4) remains the fallback backend.
 
-13. COUI (ColorOS UI components for Compose Multiplatform)
+8. COUI (ColorOS UI components for Compose Multiplatform)
    Source: https://github.com/suqi8/coui
-   License: Apache-2.0 (based on Miuix, entry 6, also Apache-2.0)
+   License: Apache-2.0 (based on Miuix, entry 2, also Apache-2.0)
    Used: UI component library since v1.75
          (io.github.suqi8.coui.kmp:coui-ui/icons/preference-android:1.1.0).
 
-14. Hybrid Mount (VFS provider LKM)
+9. Hybrid Mount (VFS provider LKM)
    Source: https://github.com/Hybrid-Mount/meta-hybrid_mount (VFS module,
            fork of https://github.com/maxsteeel/nomount)
    License: GPL-2.0-only (full text: lkm/hybridmount/LICENSE)
    Used: vendored VFS provider kernel module source under lkm/hybridmount/,
-         built for GKI 6.18.21 by lkm/build-hybridmount.sh and bundled as
-         assets/pyb110/hybridmount-6.18.21.ko (loaded only when the optional
+         built for GKI 6.18.21 by lkm/build-hybridmount.sh and shipped as
+         lib/arm64-v8a/libhybridmount.so (loaded only when the optional
          "VFS 支持" switch is on). Import baseline and divergences are listed
          in lkm/hybridmount/PROVENANCE.
+
+The application icon is drawn by this project.
