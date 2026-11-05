@@ -23,7 +23,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - App 为底部四 tab（首页/日志/历史/关于，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21（`gf957…` / `g7fcbff…` 两个 build）→6.18、6.12.69→6.12、精确匹配的 vivo V2505A 内核→V2505A），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享），关于页显示版本、源代码 / 加入社区 / 问题反馈入口，以及 AboutLibraries 生成的依赖清单与离线许可全文；release 签名 APK v1.96 已构建（13,074,171 B，md5 `2489115512275e23ab22f75c4f98e6a1`，sha256 `874bb4d2a0a8d87cac29935efab9b35842a9538c976261a0bdf1045ed2fad264`）。
 - **在线更新**：每次进入 App 时检查 Gitee Releases（`puci1/Shark`，仅托管 APK、校验文件与发布说明）并优先下载；Gitee 不可用或无更新时回退 GitHub Releases。发现更高版本后弹窗，应用内下载并校验 SHA-256 与签名，再交系统安装器；关于页也提供手动「检查更新」。Gitee 仓库不包含源码，源码仍在本 GitHub 仓库。
 - **Droidspaces 支持（仅 6.18.21）**：拓展功能里的「下载模块」按钮从 GitHub `Yunnijian/Droidspaces-LKM` 的最新 release 获取 `droidspaces_lkm` 模块，保存到 `Download/Shark/`；App 不内置模块，下载后到 KernelSU 管理器刷入。
-- **五管理器热切换（6.18.21 / 6.12.69）**：ROOT 管理器下拉新增 `Dynamic Switching`，首次干净 boot 由 `libksud_universal.so` 加载自研通用 KSU LKM（SukiSU v4.3.0-r1 基线 + 五家静态 profile，内嵌 6.18/6.12 双 KMI KO）；加载后拓展功能出现「管理器热切换」项，可在 KernelSU / KernelSU-Next / BakaSU / SukiSU / FinaSU 间切换版本上报、feature、私有 ioctl 与 primary manager appid，无需重启或重新越狱；切换通过 `/proc/kernelsu_manager`（0600 root，可读可写）。
+- **五管理器热切换（6.18.21 / 6.12.69 / V2505A 6.12.23）**：ROOT 管理器下拉新增 `Dynamic Switching`，首次干净 boot 由 `libksud_universal.so` 加载自研通用 KSU LKM（SukiSU v4.3.0-r1 基线 + 五家静态 profile，内嵌 6.18/6.12 双 KMI KO）；加载后拓展功能出现「管理器热切换」项，可在 KernelSU / KernelSU-Next / BakaSU / SukiSU / FinaSU 间切换版本上报、feature、私有 ioctl 与 primary manager appid，无需重启或重新越狱；切换通过 `/proc/kernelsu_manager`（0600 root，可读可写）。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
 - **内置范围**：三条链都以 jniLibs 原生库形式内置（`libt98260.so` / `libt61269.so` / `libv2505a.so` / `libsusfs_guard_lkm.so` / `libsusfs_guard_lkm_612.so` / `libhybridmount.so`），从 `nativeLibraryDir` 原地执行；五管理器模式另带 `libksud_universal.so`（SukiSU v4.3.0-r1 ksud，内嵌 6.18/6.12 双 KMI 通用 KO，仅用于 late-load）。assets 只保留 `manual.md`。管理器自身的 ksud **不内置**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
@@ -282,7 +282,7 @@ cp target/aarch64-linux-android/release/t61269 ../../app/app/src/main/jniLibs/ar
 
 ## 校验和
 
-- release APK：`app/app/build/outputs/apk/release/app-release.apk`（v1.97）/ 16,445,255 B / md5 `f255f8a983695947f57d6947dfe55e8e` / sha256 `01eefbeacf4b789217ccb936a519b11730263e19a882976f6ace9bc5b7c681d8`（本地构建产物，不入库；Gitee Releases 托管线上版本：https://gitee.com/puci1/Shark/releases）。
+- release APK：`app/app/build/outputs/apk/release/app-release.apk`（v1.97）/ 16,446,371 B / md5 `e6b96ec5b37f6e9a3d5dbd9770c4b921` / sha256 `25942134c137c2b019c622638bd46ca8680d925bd43a061a91433bba48aa38d4`（本地构建产物，不入库；Gitee Releases 托管线上版本：https://gitee.com/puci1/Shark/releases）。
 - Hybrid Mount VFS provider LKM（6.18.21，jniLibs `libhybridmount.so`）：390,952 B / md5 `c1b55a8d5b9b0451391049fe7ea0b6bd` / sha256 `1a0802b09d1cf7460a45821e42b5474e0a48b3ee7b888eb7b8a2205f95159c73`。
 - SUSFS guard LKM：6.18 jniLibs `libsusfs_guard_lkm.so` 3,456,440 B / sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`（未 strip）；6.12 jniLibs `libsusfs_guard_lkm_612.so` 3,258,016 B / sha256 `1f50330ad2597a527ea200dd7f2a5aa21c1b3eb5a845e176b9efbc3322266214`。
 - 管理器 LKM 构建产物参考（未随 App 分发）：KernelSU 382,232 B；Next 489,264 B；BakaSU 435,616 B；SukiSU 545,040 B；FinaSU 496,744 B（strip 后）。

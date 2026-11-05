@@ -2589,7 +2589,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun supportsUniversal(): Boolean =
-        exploit == ExploitKind.CVE98260 || exploit == ExploitKind.CVE61269
+        exploit == ExploitKind.CVE98260 ||
+            exploit == ExploitKind.CVE61269 ||
+            exploit == ExploitKind.CVE2505A
 
     private fun managerChoices(): List<ManagerKind> =
         if (supportsUniversal()) ManagerKind.entries
