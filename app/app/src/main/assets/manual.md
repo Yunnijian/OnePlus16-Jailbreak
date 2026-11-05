@@ -8,8 +8,8 @@ Shark 通过 Stellar 或 Shizuku 以 shell 身份驱动设备端 98260 exploit�
 
 1. 先安装所选 ROOT 管理器（KernelSU / FinaSU / KernelSU Next / BakaSU / SukiSU Ultra），**暂不支持ci版本的 KernelSU Next**。
 2. 启动并使用**无线调试或者adb**激活 **Stellar（推荐）** 或 **Shizuku** 服务，并授予 Shark 权限。
-3. 回到 Shark 首页点「一键越狱」，等待成功日志。V2505A 入口以 `V2505A_LATE_LOAD_OK`、`SU_RC=0` 和 `uid=0(root)` 为准。
-4. 成功后管理器会自动拉起；开启对应开关时还会停用安全弹窗、加载 **SUSFS / VFS**（VFS 开关仅 6.18.21 显示；V2505A 只显示 SUSFS，使用 6.12 的 ko）。
+3. 回到 Shark 首页点「一键越狱」，等待成功日志。V2505A 入口以 `DONE`、`SU_ID_RC=0` 和 `uid=0(root)` 为准。
+4. 成功后管理器会自动拉起；开启对应开关时还会停用安全弹窗、加载 **SUSFS / VFS**（VFS 开关仅 6.18.21 显示；V2505A 只显示 SUSFS，使用 6.12 版 `libsusfs_guard_lkm_612.so`）。
 5. 若日志显示 **MODULE NOT LOADED**，无需重启设备，直接再次尝试越狱即可。
 
 ## 权限与准备
@@ -22,7 +22,7 @@ Shark 通过 Stellar 或 Shizuku 以 shell 身份驱动设备端 98260 exploit�
 
 **preflight**（内核 release / trace 通道）→ **98260 UAF**（fake cred / SELinux 零写）→ **cred 子进程一次性 ksud late-load** → 等模块与 su → **收尾**（ksud install、卸内核防护、SUSFS、VFS、截图恢复、拉起管理器）。
 
-V2505A 使用自己的 `v2505a_plant` 和 `v2505a_run.sh`，不复用 `t98260`、`t61269`。它还会在唤醒 root 子进程前清零 `vr.ko` 使用的 `__tracepoint_sys_exit->funcs` 槽位。
+V2505A 使用独立的单入口二进制 `libv2505a`（同一份 C plant 以 `-DV2505A` 编译），不复用 `t98260`、`t61269` 的常量。它还会在唤醒 root 子进程前清零 `vr.ko` 使用的 `__tracepoint_sys_exit->funcs` 槽位。
 
 - **快路径** plant 约 2–3 秒、全流程约 4–9 秒；回收未命中时会多花几秒，属正常波动。
 - **三条链失败后**：plant 持有的页会转交给 holder，同一 boot 可直接再点一次；不要手工 kill 或 reap holder。
@@ -46,7 +46,7 @@ V2505A 使用自己的 `v2505a_plant` 和 `v2505a_run.sh`，不复用 `t98260`�
 
 ## 运行方式
 
-- **6.18.21** → CVE-2026-98260-6.18（`t98260`）；**6.12.69** → CVE-2026-98260-6.12（`t61269`）。
-- **V2505A 精确内核** → CVE-2026-98260-vivo-V2505A（`v2505a_plant` + `v2505a_run.sh`）；这是第三个独立入口，额外处理 vivo `vr.ko`，不复用前两条工具。
-- 三条链路都从已安装管理器 APK 原地执行 ksud；SUSFS 开关三个入口都支持（V2505A 用 6.12 的 ko），VFS 开关仅对 6.18 入口开放。
+- **6.18.21** → CVE-2026-98260-6.18（`libt98260.so`）；**6.12.69** → CVE-2026-98260-6.12（`libt61269.so`）。
+- **V2505A 精确内核** → CVE-2026-98260-vivo-V2505A（`libv2505a.so`）；这是第三个独立单入口，额外处理 vivo `vr.ko`，不复用前两条工具。
+- 三个入口都直接以 App 原生库（`nativeLibraryDir`）原地运行，不向 `/data/local/tmp` 部署工具；ksud 也从未安装的管理器 APK 原地执行。SUSFS 三个入口都支持（6.12/V2505A 使用 `libsusfs_guard_lkm_612.so`），VFS 开关仅对 6.18 入口开放。
 - 仅用于自有设备的系统研究。

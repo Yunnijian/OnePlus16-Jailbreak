@@ -1275,18 +1275,13 @@ class MainActivity : ComponentActivity() {
                     return@launch
                 }
                 val nativeDir = applicationInfo.nativeLibraryDir
-                val dir = if (exploit == ExploitKind.CVE98260) nativeDir else deployDir()
-                if (exploit != ExploitKind.CVE98260) {
-                    addLog("Deploying tools to $dir ...")
-                    stageAssets(dir, deployPlan())
-                }
                 addLog("Starting ${exploit.fullLabel}")
                 val cmd = when (exploit) {
                     ExploitKind.CVE98260 -> arrayOf("$nativeDir/libt98260.so", "run")
-                    ExploitKind.CVE61269 -> arrayOf("$dir/t61269", "run")
-                    ExploitKind.CVE2505A -> arrayOf("$dir/v2505a_run.sh", manager.pkg)
+                    ExploitKind.CVE61269 -> arrayOf("$nativeDir/libt61269.so", "run")
+                    ExploitKind.CVE2505A -> arrayOf("$nativeDir/libv2505a.so", "run")
                 }
-                val rc = runStreaming(cmd, dir)
+                val rc = runStreaming(cmd, nativeDir)
                 exit = rc
                 addLog("exploit exit=$rc")
                 val (active, se) = readDeviceState()
@@ -1318,92 +1313,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun deployPlan(): List<Pair<String, String>> {
-        val common = when (exploit) {
-            ExploitKind.CVE98260 -> listOf<String>()
-            ExploitKind.CVE61269 -> listOf("t61269")
-            ExploitKind.CVE2505A -> listOf("v2505a_run.sh", "v2505a_plant")
-        }
-        val extra = mutableListOf<Pair<String, String>>()
-        if (susfsSupport && exploit != ExploitKind.CVE98260) {
-            val susfs = if (exploit == ExploitKind.CVE61269 || exploit == ExploitKind.CVE2505A) {
-                "susfs_guard_lkm-6.12.ko"
-            } else {
-                "susfs_guard_lkm.ko"
-            }
-            extra.add(susfs to susfs)
-        }
-        return common.map { it to it } + extra
-    }
-
-    private fun deployDir(): String {
-        val id = try {
-            val p = PrivService.newProcess(
-                arrayOf("cat", "/proc/sys/kernel/random/boot_id"),
-                shizukuEnv(), "/data/local/tmp"
-            )
-            val text = p.getInputStream()
-                .bufferedReader().readText().trim()
-            p.waitFor()
-            text.replace("-", "").take(12)
-        } catch (t: Throwable) {
-            ""
-        }
-        val tag = id.ifEmpty { "x" }
-        return "/data/local/tmp/pyb110-$tag-${System.currentTimeMillis() / 1000}"
-    }
-
-    private fun stageAssets(dir: String, files: List<Pair<String, String>>) {
-        val stale = "killall -9 t64560_loader2 t64560_w2 t64560_v36 brm_plant 2>/dev/null"
-        runCatching {
-            PrivService.newProcess(
-                arrayOf("sh", "-c", stale),
-                shizukuEnv(), "/data/local/tmp"
-            ).waitFor()
-        }
-        val mk = PrivService.newProcess(
-            arrayOf("sh", "-c", "mkdir -p '$dir' && touch '$dir/.probe' && rm '$dir/.probe'"),
-            shizukuEnv(), "/data/local/tmp"
-        ).waitFor()
-        if (mk != 0) {
-            addLog("Deploy dir not writable: $dir rc=$mk")
-            throw java.io.IOException("deploy dir not writable: $dir")
-        }
-
-        for ((assetName, target) in files) {
-            val p = PrivService.newProcess(
-                arrayOf("sh", "-c", "cat > '$dir/$target'"),
-                shizukuEnv(), "/data/local/tmp"
-            )
-            var copied = 0L
-            try {
-                p.getOutputStream().use { out ->
-                    assets.open("pyb110/$assetName").use { copied = it.copyTo(out) }
-                }
-            } catch (t: java.io.IOException) {
-                addLog("Failed to write $target (dir/file permission?): ${t.message}")
-                throw t
-            }
-            val rc = p.waitFor()
-            if (rc != 0) addLog("Deploy failed $target rc=$rc") else addLog("Deployed $target (${copied} B)")
-        }
-
-        if (files.isNotEmpty()) {
-            PrivService.newProcess(
-                arrayOf("sh", "-c", "chmod 755 " + files.joinToString(" ") { "'$dir/${it.second}'" }),
-                shizukuEnv(), "/data/local/tmp"
-            ).waitFor()
-        }
-    }
-
     private fun runStreaming(cmd: Array<String>, dir: String): Int {
+        val susfsKo = if (exploit == ExploitKind.CVE61269 || exploit == ExploitKind.CVE2505A) {
+            "${applicationInfo.nativeLibraryDir}/libsusfs_guard_lkm_612.so"
+        } else {
+            "${applicationInfo.nativeLibraryDir}/libsusfs_guard_lkm.so"
+        }
         val env = shizukuEnv() + "PYB110_DIR=$dir" + "PYB110_MANAGER=${manager.manager}" +
             "PYB110_LATE_LOAD=1" +
             "PYB110_UNLOAD_GUARD=${if (unloadGuard) "1" else "0"}" +
             "PYB110_DISABLE_ANTIROOT=${if (antiRootGuard) "1" else "0"}" +
             "PYB110_SUSFS=${if (susfsSupport) "1" else "0"}" +
             "PYB110_VFS=${if (vfsSupport) "1" else "0"}" +
-            "PYB110_SUSFS_KO=${applicationInfo.nativeLibraryDir}/libsusfs_guard_lkm.so" +
+            "PYB110_SUSFS_KO=$susfsKo" +
             "PYB110_VFS_KO=${applicationInfo.nativeLibraryDir}/libhybridmount.so"
         val p = PrivService.newProcess(cmd, env, dir)
         val out = p.getInputStream()

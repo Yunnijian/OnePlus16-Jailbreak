@@ -46,14 +46,17 @@ is distributed by this repository.
    License: GPL-2.0 (full text: lkm/susfs4ksu-lkm/LICENSE)
    Used: vendored SUSFS loadable kernel module source under
          lkm/susfs4ksu-lkm/. Local modifications for BTI kernels are listed in
-         lkm/susfs4ksu-lkm/MODIFICATIONS.md. The 6.12 build is shipped as
-         assets/pyb110/susfs_guard_lkm-6.12.ko.
+         lkm/susfs4ksu-lkm/MODIFICATIONS.md. The 6.18 build is shipped as
+         lib/arm64-v8a/libsusfs_guard_lkm.so and the 6.12 build as
+         lib/arm64-v8a/libsusfs_guard_lkm_612.so; both are loaded in place
+         from nativeLibraryDir.
 
 6. YuKongA/CVE-2026-98260 (6.12.69-ex branch)
    Source: https://github.com/YuKongA/CVE-2026-98260
    License: none declared upstream (repository has no LICENSE file).
-   Used: timer.c modified with this project's fast-tuning and bundled as
-         assets/pyb110/t61269 for the experimental 6.12.69-ex option.
+   Used: timer.c modified with this project's fast-tuning and bundled via the
+         Rust single-entry runners as lib/arm64-v8a/libt61269.so (6.12.69) and
+         lib/arm64-v8a/libv2505a.so (vivo V2505A, compiled with -DV2505A).
          Redistribution is NOT cleared by the upstream author; treat this
          binary as a local research build until a license/permission exists.
 

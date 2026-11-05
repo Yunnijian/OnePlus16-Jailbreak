@@ -10,7 +10,7 @@ OnePlus 16（PYB110）一键越狱工具。
 
 ## 当前状态
 
-- **三个独立入口**：`CVE-2026-98260-6.18` 使用单入口 Rust 工具 `t98260`；`CVE-2026-98260-6.12` 使用 Rust 单入口 `t61269`；`CVE-2026-98260-vivo-V2505A` 使用独立 `v2505a_plant` / `v2505a_run.sh`，不复用前两条工具，并额外处理 vivo `vr.ko` 的 `sys_exit` tracepoint。三条都只走 `ksud late-load`。
+- **三个独立入口**：`CVE-2026-98260-6.18` 使用单入口 Rust 工具 `t98260`；`CVE-2026-98260-6.12` 使用 Rust 单入口 `t61269`；`CVE-2026-98260-vivo-V2505A` 使用 Rust 单入口 `v2505a`（同一 C plant 以 `-DV2505A` 编译，额外处理 vivo `vr.ko` 的 `sys_exit` tracepoint）。三条都以 jniLibs 原生库形式从 `nativeLibraryDir` 原地执行，且都只走 `ksud late-load`。
 - **6.18.21 双 build**：旧 `gf957accaf563-ab15926176` 与新 OTA `g7fcbffcad3e1-ab16353812`（17.0.1.201）都支持，常量表按 `uname` 选择。新内核对 CVE-2026-64560 已回移修复（64560 链失效），CVE-2026-98260 未修复，`t98260` 真机全链通过（4.9 s / 6.4 s）。
 - 以下管理器版本是本机开发期验证参数；**App 不内置任何管理器 LKM/ksud**，运行时只使用已安装管理器 APK 里的 ksud。
 - **KernelSU（官方 main，UAPI6）**：LKM 按 `main` `db6263d3`（`v3.3.1-27-gdb6263d3`，versionCode 32707）用本机 6.18.21 GKI 重编，382,232 B、229 个 UNDEF 全部能由 `syms.txt` 解析，真机验证通过；ksud 同版本（6,618,008 B，uapi 6）。管理器需用同版本的 `KernelSU_v3.3.1-27-gdb6263d3_32707-release.apk`（与旧版 32680 同签名，`adb install -r` 直接覆盖）；旧管理器的 supercall 仍可用，但没有 UAPI6 的模块 preinit 等新特性。注意 UAPI6 的 ksud 必须配 UAPI6 LKM（ksud 启动会校验），不能与旧 5 版 LKM 混用。
@@ -19,10 +19,10 @@ OnePlus 16（PYB110）一键越狱工具。
 - **KernelSU Next（dev 最新）**：按 `dev` `da0b3f37`（`v3.4.2-87-gda0b3f37`，管理器 versionCode 33442）重编 LKM 489,264 B、ksud 7,611,344 B（uapi 6）；管理器由用户安装，App 中可选，真机验证通过（33442-6）。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（目标 6.12.69）**：Rust 单入口 `t61269`（内嵌 `YuKongA/CVE-2026-98260` `timer.c` 的本仓库改造版 `exploit/src/t61269_plant.c`）。v1.68 起与 6.18 全面对齐：**rootd / `t61269_su` / `run612.sh` 已删除**，进程内 preflight → UAF fake cred → cred 子进程一次性 `ksud late-load --kmi android16-6.12` 后 park，收尾由同一套并行 `finish_manager` 完成，失败出口/同 boot 重跑语义一致（差别见 6.12 小节）。旧链路曾在 PLZ110 用 SukiSU 41100 跑通；单入口版需在 6.12.69 设备复测。
-- **CVE-2026-98260-vivo-V2505A**：`vivo V2505A / PD2505`、`PD2505B_A_16.0.24.7.W10`、内核 `6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k` 的独立入口。复现方法、常量、payload 校验和完整验证日志见 `ports/v2505a/README.md`；当前只在 KernelSU 上完成实机验证。UAF 阶段失败后由 holder 保留现场，同一 boot 可直接重试。
+- **CVE-2026-98260-vivo-V2505A**：`vivo V2505A / PD2505`、`PD2505B_A_16.0.24.7.W10`、内核 `6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k` 的独立入口，Rust 单入口 `v2505a`（`exploit/src/t61269_plant.c` 以 `-DV2505A` 编入）。复现方法、常量、payload 校验和完整验证日志见 `ports/v2505a/README.md`；当前只在 KernelSU 上完成实机验证。UAF 阶段失败后由 holder 保留现场，同一 boot 可直接重试。
 - App 为底部三 tab（首页/日志/历史，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21（`gf957…` / `g7fcbff…` 两个 build）→6.18、6.12.69→6.12、精确匹配的 vivo V2505A 内核→V2505A），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享）；release 签名 APK v1.91 已构建（7,418,773 B，md5 `fa8f8b9958935dd37a9b7bc261139199`，sha256 `632a4836a6ce2c8e3b61d10b6dbc6daa6f050f8da6e07fe750033ee40c2254e3`）。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
-- **内置范围**：6.18 的 `t98260` 与两个 ko 以 jniLibs 原生库形式内置（`libt98260.so` / `libsusfs_guard_lkm.so` / `libhybridmount.so`），从 `nativeLibraryDir` 原地执行；assets 保留 6.12 的 `t61269`、`susfs_guard_lkm-6.12.ko` 与 V2505A 的 `v2505a_plant` / `v2505a_run.sh`。**不内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
+- **内置范围**：三条链都以 jniLibs 原生库形式内置（`libt98260.so` / `libt61269.so` / `libv2505a.so` / `libsusfs_guard_lkm.so` / `libsusfs_guard_lkm_612.so` / `libhybridmount.so`），从 `nativeLibraryDir` 原地执行；assets 只保留 `manual.md`，不再放设备端文件。**不内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
 ## 截图
 
@@ -50,17 +50,16 @@ OnePlus 16（PYB110）一键越狱工具。
                 │ Shizuku (uid 2000)
                 ▼
 ┌───────────────────────────────────────────────┐
-│ 6.18：/data/app/<pkg>/lib/arm64/（原地执行）  │
-│  98260 6.18：libt98260.so (Rust 单入口)       │
+│ 三条链：nativeLibraryDir（原地执行）          │
+│  6.18：libt98260.so (Rust 单入口)             │
+│  6.12：libt61269.so (Rust 单入口)             │
+│  V2505A：libv2505a.so (-DV2505A 单入口)       │
 │   1 C plant --auto 进程内 preflight           │
 │     （内核 release / trace 通道）             │
 │   2 UAF / 自推 slide → 假 cred → 子进程       │
 │     一次性 late-load（只调一次，带 --kmi）     │
 │   3 等 KSU / su → ksud install                │
 │   4 SUSFS / 截图恢复 / 管理器拉起 并行收尾     │
-│ 6.12/V2505A：/data/local/tmp/pyb110-<boot>/   │
-│  98260 6.12：t61269（Rust 单入口）           │
-│  V2505A：v2505a_plant + v2505a_run.sh         │
 │  三条都从已安装管理器 APK 原地执行 ksud；      │
 │  不再部署 ksu-base*.ko / syms / prep_* /      │
 │  forker / take_slide / t64560_*               │
@@ -95,7 +94,7 @@ OnePlus 16（PYB110）一键越狱工具。
 
 - 单入口 `t61269` = Rust 入口 + `exploit/src/t61269_plant.c`（`YuKongA/CVE-2026-98260` `timer.c` 的本仓库改造版）；**rootd / `t61269_su` / `run612.sh` 已全部删除**。
 - 目标内核必须是 `6.12.69`：进程内 preflight 校验 `uname` 与 trace 通道，不匹配直接 `FAIL=probe`。
-- 流程与 6.18 相同：UAF fake cred → SELinux 零写（含 `panic_on_warn` 零写）→ cred 子进程**一次性** `ksud late-load --kmi android16-6.12`（env `PYB110_KSUD/PYB110_MANAGER_PKG/PYB110_KMI`）后 park，父进程 park 持喷发页；收尾（`ksud install`/卸 `oplus_secure_guard_new`/SUSFS `susfs_guard_lkm-6.12.ko`/截图恢复/管理器拉起）由 Rust `finish_manager` 并行完成。
+- 流程与 6.18 相同：UAF fake cred → SELinux 零写（含 `panic_on_warn` 零写）→ cred 子进程**一次性** `ksud late-load --kmi android16-6.12`（env `PYB110_KSUD/PYB110_MANAGER_PKG/PYB110_KMI`）后 park，父进程 park 持喷发页；收尾（`ksud install`/卸 `oplus_secure_guard_new`/SUSFS `libsusfs_guard_lkm_612.so`/截图恢复/管理器拉起）由 Rust `finish_manager` 并行完成。
 - 失败出口与 6.18 同款（`FAIL=`/`FAIL_EXIT=`/`PYB110_FORCE_FAIL=cred`），stale 检查放行 holder，同 boot 可重跑。**唯一差别**：6.12 链的失败可能留下 unreaped zombie（reap 会把 `rb_erase` 落到未知内存），此时进程 park 并改名 `t61269-hold` 持住 zombie——同样可重跑，但 holder 不自灭，残留到重启。
 
 **两个分支共用**
@@ -111,8 +110,8 @@ OnePlus16-Jailbreak/
 │   ├── app/                     :app 模块（Kotlin/Compose/COUI/Shizuku）
 │   │   ├── src/main/java/com/pyb110/onekey/MainActivity.kt  三 tab（首页/日志/历史）与流程调度
 │   │   ├── src/main/java/com/pyb110/onekey/HistoryStore.kt  历史日志落盘（每次运行一个文件）
-│   │   ├── src/main/assets/pyb110/  t61269 + 6.12 SUSFS ko + v2505a 文件
-│   │   ├── src/main/jniLibs/arm64-v8a/  libt98260 / libsusfs / libhybridmount
+│   │   ├── src/main/assets/      使用手册 manual.md（无设备端文件）
+│   │   ├── src/main/jniLibs/arm64-v8a/  libt98260 / libt61269 / libv2505a / libsusfs(×2) / libhybridmount
 │   │   ├── src/main/res/        自绘图标与资源
 │   │   ├── build.gradle.kts     签名配置 + R8
 │   │   └── proguard-rules.pro
@@ -142,7 +141,7 @@ OnePlus16-Jailbreak/
 └── LICENSE                      GPL-3.0（本项目自研代码）
 ```
 
-> 前两条分支由本仓库 Rust 入口 + [exploit/src](exploit/src) 的 C plant 核心链接成单一 ELF（`t98260` / `t61269`）；V2505A 使用独立 `v2505a_plant` / `v2505a_run.sh`。6.18 从 `nativeLibraryDir` 原地执行，6.12/V2505A 才部署到 `/data/local/tmp/pyb110-<boot_id>-<epoch>/`；ksud 不打包，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。来源与许可见 `NOTICE` 与下文。
+> 三条分支都由本仓库 Rust 入口 + [exploit/src](exploit/src) 的 C plant 核心链接成单一 ELF（`t98260` / `t61269` / `v2505a`），全部从 `nativeLibraryDir` 原地执行，不再部署到 `/data/local/tmp`；ksud 不打包，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。来源与许可见 `NOTICE` 与下文。
 
 ## 构建
 
@@ -155,7 +154,7 @@ cd app
 cp keystore.properties.example keystore.properties   # 填入自己的签名信息
 # local.properties 里写 sdk.dir=/path/to/android-sdk
 ./gradlew :app:assembleDebug
-./gradlew :app:assembleRelease   # R8 + 资源压缩，约 7.1 MB（不含管理器 APK）
+./gradlew :app:assembleRelease   # R8 + 资源压缩，约 6.7 MB（不含管理器 APK）
 ```
 
 `keystore.properties`、`keystore/`、`*.jks`、`local.properties` 已被 `.gitignore` 排除。生成 release 密钥示例：
@@ -167,17 +166,18 @@ keytool -genkeypair -v -keystore keystore/release.jks -alias oneplus16 \
 
 ### 内置素材
 
-设备端文件分两处：6.18 用 jniLibs（`app/app/src/main/jniLibs/arm64-v8a/`），其余用 assets（`app/app/src/main/assets/pyb110/`）；运行时不联网。
+设备端文件全部在 jniLibs（`app/app/src/main/jniLibs/arm64-v8a/`），三条链都从 `nativeLibraryDir` 原地执行，运行时不联网、不向 `/data/local/tmp` 部署工具。
 
-- 6.18 原生库（原地执行，不部署）：`libt98260.so`、`libsusfs_guard_lkm.so`、`libhybridmount.so`；
-- 98260 6.12：`t61269`；
-- V2505A：`v2505a_plant` + `v2505a_run.sh`（只在精确匹配的 vivo V2505A 内核上启用）；
-- 6.12 可选：`susfs_guard_lkm-6.12.ko`；
+- `libt98260.so`：98260 6.18 单入口；
+- `libt61269.so`：98260 6.12 单入口；
+- `libv2505a.so`：98260 V2505A 单入口（`-DV2505A`，只在精确匹配的 vivo V2505A 内核上启用）；
+- `libsusfs_guard_lkm.so` / `libsusfs_guard_lkm_612.so`：SUSFS guard LKM（6.18 / 6.12），原地 `ksud insmod`；
+- `libhybridmount.so`：Hybrid Mount VFS provider（6.18）；
 - 不部署 ksud：运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。
 
 不再打包 KernelSU 的 `ksu-base*.ko`、`syms.txt`、`prep_*`、`forker`、`take_slide.sh` 和 64560 的任何二进制。
 
-更新素材时替换对应目录下的文件并重新打包 APK（6.18 二进制统一拷成 `libt98260.so`，不要放回 assets）。运行前必须已安装所选管理器 APK。
+更新素材时替换 jniLibs 下对应文件并重新打包 APK（所有二进制统一用 `lib*.so` 命名，不要再放回 assets）。运行前必须已安装所选管理器 APK。
 
 ### LKM
 
@@ -207,7 +207,7 @@ bash lkm/build-susfs.sh
 
 三条 98260 分支都只走 `ksud late-load`；LKM 由 ksud 内嵌提供，App 不再部署 KernelSU ko/ksud，也不再有 `insmod` 回退。管理器与 ksud 建议直接用官方 release / CI 产物（BakaSU 的 `Manager-release` 与 `ksud`），不要在本地重复编译。
 
-`lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `28b2e85`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall、hide_syms 以及 sus_map 的间接 show 入口都换成了 syscall / seq_operations wrapper（并适配上游新增的 `/proc/susfs_map` 规则节点）；`sus_map` 只对 KernelSU 会 umount 的 app 生效，`su` 授予 root 的进程不隐藏。规则矩阵与工具在 `lkm/susfs-tools/`。构建产物随 App 分发：6.18 为 jniLibs 的 `libsusfs_guard_lkm.so`（原地 `ksud insmod`），6.12 为 `assets/pyb110/susfs_guard_lkm-6.12.ko`（部署后加载）。
+`lkm/susfs4ksu-lkm` 是 vendored 的 SUSFS guard LKM 源码（上游 `28b2e85`，GPL-2.0）。为 PYB110 的 BTI 内核把 reboot supercall、hide_syms 以及 sus_map 的间接 show 入口都换成了 syscall / seq_operations wrapper（并适配上游新增的 `/proc/susfs_map` 规则节点）；`sus_map` 只对 KernelSU 会 umount 的 app 生效，`su` 授予 root 的进程不隐藏。规则矩阵与工具在 `lkm/susfs-tools/`。构建产物随 App 分发：6.18 为 jniLibs 的 `libsusfs_guard_lkm.so`，6.12 为 jniLibs 的 `libsusfs_guard_lkm_612.so`，均由 Rust 入口从 `nativeLibraryDir` 原地 `ksud insmod`。
 
 `lkm/hybridmount` 是 vendored 的 Hybrid Mount VFS provider LKM 源码（上游 `Hybrid-Mount/meta-hybrid_mount`，GPL-2.0，provenance 见 `lkm/hybridmount/PROVENANCE`）。上游矩阵不含 6.18，这里用 `lkm/build-hybridmount.sh` 针对本机 GKI 6.18.21 编译（产物 390,952 B，vermagic `6.18.21-4k`），以 jniLibs 的 `libhybridmount.so` 随 App 分发；开启「VFS 支持」开关后，越狱成功时从 `nativeLibraryDir` 直接 `ksud insmod`（回退 `insmod`），日志给出 `VFS_LOADED` / `VFS_ALREADY` / `VFS_LOAD_FAIL`。metamodule 的 mount 脚本负责在 late-load 时按 VFS 规则挂载；本模块只提供内核侧的 provider。
 
@@ -221,7 +221,17 @@ cargo build --release --target aarch64-linux-android
 cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/jniLibs/arm64-v8a/libt98260.so
 ```
 
-`t98260 run` 从 `nativeLibraryDir` 原地运行（`PYB110_DIR` 也指向该目录，plant 输出走内存）；`t61269 run` 与 V2505A 仍从 `/data/local/tmp/pyb110-<boot_id>-<epoch>/` 运行，读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu` / `finasu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）、`PYB110_SUSFS`（`1` / `0`）与 `PYB110_VFS`（`1` / `0`，仅 6.18 分支）选择行为；6.18 的 `PYB110_SUSFS_KO` / `PYB110_VFS_KO` 指向 `nativeLibraryDir` 里的 `lib*.so`。测试钩子 `PYB110_FORCE_FAIL=cred` 强制失败。V2505A 由 `v2505a_run.sh` 解析管理器 APK 内的 ksud；失败后的 plant 会转成 holder，同一 boot 可直接重试。
+6.12 与 V2505A 共用 `exploit/rust-t61269`：默认构建 6.12，`--features v2505a` 时 `build.rs` 追加 `-DV2505A` 编同一份 C plant：
+
+```bash
+cd exploit/rust-t61269
+cargo build --release --target aarch64-linux-android
+cp target/aarch64-linux-android/release/t61269 ../../app/app/src/main/jniLibs/arm64-v8a/libt61269.so
+cargo build --release --target aarch64-linux-android --features v2505a
+cp target/aarch64-linux-android/release/t61269 ../../app/app/src/main/jniLibs/arm64-v8a/libv2505a.so
+```
+
+三条链的 `run` 都从 `nativeLibraryDir` 原地运行（`PYB110_DIR` 也指向该目录，plant 输出走内存），读取 `PYB110_MANAGER`（`kernelsu` / `next` / `bakasu` / `sukisu` / `finasu`）、`PYB110_DISABLE_ANTIROOT`（`1` / `0`）、`PYB110_UNLOAD_GUARD`（`1` / `0`）、`PYB110_SUSFS`（`1` / `0`）与 `PYB110_VFS`（`1` / `0`，仅 6.18 分支）选择行为；6.12/V2505A 的 `PYB110_SUSFS_KO` 指向 `nativeLibraryDir` 里的 `libsusfs_guard_lkm_612.so`，6.18 指向 `libsusfs_guard_lkm.so`。测试钩子 `PYB110_FORCE_FAIL=cred` 强制失败。三条链失败后的 plant 都会转成 holder（`t61269-hold` / `t98260-hold`），同一 boot 可直接重试。
 
 ## 使用
 
@@ -232,7 +242,7 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/jniLibs/ar
    - 「越狱后禁用安全弹窗」（默认开启）：拿到 su 后停止 `riskdetect` HAL（`stop riskdetect`），不自动恢复、重启后恢复；不触碰 `com.oplus.exsystemservice`/截图服务。
    - 「越狱后软重启」：流程跑完且模块确认加载后，以 `su` 执行 `setprop ctl.restart zygote`；失败不会影响已完成的越狱。
    - 「越狱后卸载内核安全防护」（默认开启）：拿到 su 后 `rmmod oplus_secure_guard_new`，日志给出 `UNLOAD_GUARD_GONE` 或 `UNLOAD_GUARD_STILL_LOADED`；模块被引用时不会强制卸载，重启后会重新加载。
-   - 「SUSFS 支持」：6.18 从 `nativeLibraryDir` 加载 `libsusfs_guard_lkm.so`；6.12 与 V2505A 使用 `susfs_guard_lkm-6.12.ko`（部署后加载）。两者都以 `ksud insmod`（回退 `insmod`）加载；日志给出 `SUSFS_LOADED` / `SUSFS_LOAD_FAIL`，加载失败不影响已完成的越狱。默认关闭。
+   - 「SUSFS 支持」：6.18 从 `nativeLibraryDir` 加载 `libsusfs_guard_lkm.so`；6.12 与 V2505A 加载 `libsusfs_guard_lkm_612.so`。两者都以 `ksud insmod`（回退 `insmod`）原地加载；日志给出 `SUSFS_LOADED` / `SUSFS_LOAD_FAIL`，加载失败不影响已完成的越狱。默认关闭。
    - 「VFS 支持」：开启后越狱收尾时从 `nativeLibraryDir` 加载 `libhybridmount.so`（Hybrid Mount 的 VFS provider）；仅 6.18 分支显示并加载。日志给出 `VFS_LOADED` / `VFS_ALREADY` / `VFS_LOAD_FAIL`，失败不影响已完成的越狱。默认关闭。注意 provider 在 `ksud late-load` 之后加载，而 metamodule 的挂载阶段发生在 late-load 内：本次开机按 `vfs` 规则配置的模块会被上游按“provider 不可用”跳过（`state.vfs_error`）；provider 在加载后对后续 VFS 操作可用。
 5. 点击「一键越狱」，等待日志出现 `DONE`。
 6. 越狱成功后用对应管理器授权 root。
@@ -251,7 +261,7 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/jniLibs/ar
 ## 风险
 
 - CVE-2026-98260 是竞态 UAF，任何一次运行都可能导致内核 panic / 重启。
-- 6.18 与 6.12.69 两条分支都已无 rootd；V2505A 使用独立 shell 驱动，失败后由 holder 保留现场，可在同一 boot 直接重试。
+- 6.18 与 6.12.69 两条分支都已无 rootd；V2505A 为独立单入口二进制，失败后由 holder 保留现场，可在同一 boot 直接重试。
 - 本工具仅用于**自有设备**的系统研究与 root 管理；请勿用于未授权设备。
 - 使用 root 与内核模块存在数据损坏、保修失效等风险，风险自负。
 
@@ -269,5 +279,5 @@ cp target/aarch64-linux-android/release/t98260 ../../app/app/src/main/jniLibs/ar
 
 - release APK：`app/app/build/outputs/apk/release/app-release.apk`（v1.91）/ 7,418,773 B / md5 `fa8f8b9958935dd37a9b7bc261139199` / sha256 `632a4836a6ce2c8e3b61d10b6dbc6daa6f050f8da6e07fe750033ee40c2254e3`（本地构建产物，不入库）。
 - Hybrid Mount VFS provider LKM（6.18.21，jniLibs `libhybridmount.so`）：390,952 B / md5 `c1b55a8d5b9b0451391049fe7ea0b6bd` / sha256 `1a0802b09d1cf7460a45821e42b5474e0a48b3ee7b888eb7b8a2205f95159c73`。
-- SUSFS guard LKM：6.18 jniLibs `libsusfs_guard_lkm.so` 3,456,440 B / sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`（未 strip）；6.12 `assets/pyb110/susfs_guard_lkm-6.12.ko` 3,258,016 B / sha256 `1f50330ad2597a527ea200dd7f2a5aa21c1b3eb5a845e176b9efbc3322266214`。
+- SUSFS guard LKM：6.18 jniLibs `libsusfs_guard_lkm.so` 3,456,440 B / sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`（未 strip）；6.12 jniLibs `libsusfs_guard_lkm_612.so` 3,258,016 B / sha256 `1f50330ad2597a527ea200dd7f2a5aa21c1b3eb5a845e176b9efbc3322266214`。
 - 管理器 LKM 构建产物参考（未随 App 分发）：KernelSU 382,232 B；Next 489,264 B；BakaSU 435,616 B；SukiSU 545,040 B；FinaSU 496,744 B（strip 后）。
