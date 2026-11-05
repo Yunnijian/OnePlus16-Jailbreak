@@ -260,7 +260,6 @@ class MainActivity : ComponentActivity() {
     private var dynamicSwitching by mutableStateOf(false)
     private var universalLoaded by mutableStateOf(false)
     private var hotManager by mutableStateOf(ManagerKind.KERNELSU)
-    private var hotCurrent by mutableStateOf(ManagerKind.KERNELSU)
     private var hotSwitchBusy by mutableStateOf(false)
     private var hotSwitchError by mutableStateOf<String?>(null)
     private var tab by mutableStateOf(AppTab.HOME)
@@ -443,7 +442,6 @@ class MainActivity : ComponentActivity() {
         }
         dynamicSwitching = manager == ManagerKind.DYNAMIC
         hotManager = if (dynamicSwitching) ManagerKind.KERNELSU else manager
-        hotCurrent = hotManager
         deviceModel = resolveDeviceName()
         refreshStaticStateAsync()
         refreshKsuAsync()
@@ -963,12 +961,7 @@ class MainActivity : ComponentActivity() {
                 runRootCommand("cat /proc/kernelsu_manager", 20)
             }
             universalLoaded = rc == 0 && text.isNotEmpty()
-            if (universalLoaded) {
-                val activePkg = text.substringBefore(' ')
-                ManagerKind.entries.firstOrNull {
-                    it != ManagerKind.DYNAMIC && it.pkg == activePkg
-                }?.let { hotCurrent = it }
-            } else {
+            if (!universalLoaded) {
                 addLog("Universal KO check failed: rc=$rc ${text.take(80)}")
             }
         }
@@ -1007,65 +1000,6 @@ class MainActivity : ComponentActivity() {
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (exploit == ExploitKind.CVE98260 && universalLoaded) {
-                        item {
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Filled.SwapHoriz,
-                                            contentDescription = null,
-                                            tint = COUITheme.colorScheme.onBackground
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(
-                                            text = "管理器热切换",
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "当前 ${hotCurrent.fullLabel}；切换只改内核 profile，不重启、不重新越狱。",
-                                        fontSize = 13.sp,
-                                        color = COUITheme.colorScheme.onSurfaceVariantSummary
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    WindowDropdownPreference(
-                                        title = "目标管理器",
-                                        items = hotManagerChoices().map { it.fullLabel },
-                                        selectedIndex = hotManagerChoices().indexOf(hotManager).coerceAtLeast(0),
-                                        startAction = {
-                                            Icon(
-                                                imageVector = Icons.Filled.SwapHoriz,
-                                                contentDescription = null,
-                                                modifier = Modifier.padding(end = 6.dp),
-                                                tint = COUITheme.colorScheme.onBackground
-                                            )
-                                        },
-                                        onSelectedIndexChange = {
-                                            hotManager = hotManagerChoices()[it]
-                                        }
-                                    )
-                                    HorizontalDivider()
-                                    TextButton(
-                                        text = if (hotSwitchBusy) "切换中…" else "切换",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.textButtonColorsPrimary(),
-                                        onClick = { switchHotManager(hotManager) }
-                                    )
-                                    hotSwitchError?.let {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = it,
-                                            fontSize = 12.sp,
-                                            color = Color(0xFFD32F2F)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
                     item {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column {
@@ -1143,6 +1077,34 @@ class MainActivity : ComponentActivity() {
                                             )
                                         }
                                     )
+                                    if (universalLoaded) {
+                                        HorizontalDivider()
+                                        WindowDropdownPreference(
+                                            title = "管理器热切换",
+                                            items = hotManagerChoices().map { it.fullLabel },
+                                            selectedIndex = hotManagerChoices().indexOf(hotManager).coerceAtLeast(0),
+                                            startAction = {
+                                                Icon(
+                                                    imageVector = Icons.Filled.SwapHoriz,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.padding(end = 6.dp),
+                                                    tint = COUITheme.colorScheme.onBackground
+                                                )
+                                            },
+                                            onSelectedIndexChange = {
+                                                val target = hotManagerChoices()[it]
+                                                hotManager = target
+                                                switchHotManager(target)
+                                            }
+                                        )
+                                        hotSwitchError?.let {
+                                            Text(
+                                                text = it,
+                                                fontSize = 12.sp,
+                                                color = Color(0xFFD32F2F)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2321,7 +2283,6 @@ class MainActivity : ComponentActivity() {
         dynamicSwitching = kind == ManagerKind.DYNAMIC
         if (dynamicSwitching) {
             hotManager = ManagerKind.KERNELSU
-            hotCurrent = ManagerKind.KERNELSU
         }
         getSharedPreferences("pyb110", MODE_PRIVATE).edit()
             .putString("manager", kind.name)
@@ -2385,7 +2346,6 @@ class MainActivity : ComponentActivity() {
             withContext(Dispatchers.Main) {
                 hotSwitchBusy = false
                 if (rc == 0) {
-                    hotCurrent = kind
                     hotSwitchError = null
                     addLog("Hot switch -> ${kind.fullLabel} (rc=0)")
                     val intent = packageManager.getLaunchIntentForPackage(pkg)
