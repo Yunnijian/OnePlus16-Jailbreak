@@ -282,7 +282,7 @@ cp target/aarch64-linux-android/release/t61269 ../../app/app/src/main/jniLibs/ar
 
 ## 校验和
 
-- release APK：`app/app/build/outputs/apk/release/app-release.apk`（v1.97）/ 13,401,559 B / md5 `423fdd80ec13690f07aec05c37501eaf` / sha256 `3cb6b367a128fe5c2260b6c0475e2f4d23f73d514195c543a72ee11422aaaa4c`（本地构建产物，不入库；Gitee Releases 托管线上版本：https://gitee.com/puci1/Shark/releases）。
+- release APK：`app/app/build/outputs/apk/release/app-release.apk`（v1.97）/ 13,446,199 B / md5 `7ead31b6d8ebf2c817a578415da94dc3` / sha256 `a0027b366c99cd891f93186027d9870c29a247348ace67dc969a75d0a696f4a7`（本地构建产物，不入库；Gitee Releases 托管线上版本：https://gitee.com/puci1/Shark/releases）。
 - Hybrid Mount VFS provider LKM（6.18.21，jniLibs `libhybridmount.so`）：390,952 B / md5 `c1b55a8d5b9b0451391049fe7ea0b6bd` / sha256 `1a0802b09d1cf7460a45821e42b5474e0a48b3ee7b888eb7b8a2205f95159c73`。
 - SUSFS guard LKM：6.18 jniLibs `libsusfs_guard_lkm.so` 3,456,440 B / sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`（未 strip）；6.12 jniLibs `libsusfs_guard_lkm_612.so` 3,258,016 B / sha256 `1f50330ad2597a527ea200dd7f2a5aa21c1b3eb5a845e176b9efbc3322266214`。
 - 管理器 LKM 构建产物参考（未随 App 分发）：KernelSU 382,232 B；Next 489,264 B；BakaSU 435,616 B；SukiSU 545,040 B；FinaSU 496,744 B（strip 后）。
