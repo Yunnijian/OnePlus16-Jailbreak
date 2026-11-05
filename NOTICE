@@ -13,8 +13,9 @@ Supported managers (not bundled)
 --------------------------------
 KernelSU, KernelSU Next, FinaSU, BakaSU and SukiSU Ultra are supported as
 externally installed managers. The App executes the ksud payload from the
-user-installed manager APK in place; no manager LKM, source, or ksud binary
-is distributed by this repository.
+user-installed manager APK in place. The only bundled KSU-side binary is
+libksud_universal.so, the optional late-load loader for the universal
+profile-switch module described in entry 11.
 
 1. CVE-2026-64560 public tooling
    Source: https://github.com/Feng1586/CVE-2026-64560-public
@@ -89,5 +90,15 @@ is distributed by this repository.
     Used: Gradle plugin and core library that generate and parse the
           dependency/license metadata shown on the in-app "开放源代码许可"
           screen (com.mikepenz:aboutlibraries-core:15.2.0).
+
+11. Universal KSU profile-switch loader (libksud_universal.so)
+    Source: built from SukiSU Ultra v4.3.0-r1 (commit 0a4c3132)
+            https://github.com/SukiSU-Ultra/SukiSU-Ultra
+    License: GPL-2.0 (full text: app/src/main/assets/licenses/GPL-2.0.txt)
+    Used: optional 6.18.21 late-load loader that embeds the universal LKM
+          with KernelSU / KernelSU-Next / BakaSU / SukiSU / FinaSU profile
+          tables. Local modifications and build steps are documented in the
+          KSU-Universal project README. The manager APKs' own ksud binaries
+          remain external (see "Supported managers" above).
 
 The application icon is drawn by this project.

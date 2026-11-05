@@ -24,8 +24,8 @@ android {
         applicationId = "com.pyb110.onekey"
         minSdk = 33
         targetSdk = 37
-        versionCode = 85
-        versionName = "1.95"
+        versionCode = 87
+        versionName = "1.97"
         ndk {
             abiFilters.add("arm64-v8a")
         }
@@ -60,6 +60,7 @@ android {
         jniLibs {
             useLegacyPackaging = true
             keepDebugSymbols.add("**/libt98260.so")
+            keepDebugSymbols.add("**/libksud_universal.so")
             keepDebugSymbols.add("**/libt61269.so")
             keepDebugSymbols.add("**/libv2505a.so")
             keepDebugSymbols.add("**/libsusfs_guard_lkm.so")
