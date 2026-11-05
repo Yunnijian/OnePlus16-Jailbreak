@@ -2,6 +2,7 @@ package com.pyb110.onekey
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -19,6 +20,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -37,6 +39,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Row
@@ -56,11 +59,16 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Copyright
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.RemoveModerator
@@ -75,20 +83,25 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -102,6 +115,8 @@ import kotlinx.coroutines.launch
 import androidx.core.content.FileProvider
 import java.io.File
 import kotlinx.coroutines.withContext
+import com.mikepenz.aboutlibraries.Libs
+import com.mikepenz.aboutlibraries.entity.Library
 import rikka.shizuku.Shizuku
 import roro.stellar.Stellar
 import io.github.suqi8.coui.kmp.basic.Button
@@ -137,6 +152,87 @@ import io.github.suqi8.coui.kmp.theme.ColorSchemeMode
 import io.github.suqi8.coui.kmp.theme.COUITheme
 import io.github.suqi8.coui.kmp.theme.ThemeController
 import io.github.suqi8.coui.kmp.utils.PressFeedbackType
+
+private const val PROJECT_URL = "https://github.com/Yunnijian/OnePlus16-Jailbreak"
+
+private data class LicenseText(
+    val name: String,
+    val url: String?,
+    val content: String? = null,
+    val asset: String? = null,
+)
+
+private data class LicenseItem(
+    val name: String,
+    val version: String? = null,
+    val author: String? = null,
+    val website: String? = null,
+    val licenses: List<LicenseText> = emptyList(),
+)
+
+private data class LocalLicense(
+    val title: String,
+    val summary: String,
+    val licenseName: String,
+    val asset: String,
+    val url: String?,
+)
+
+private val localLicenses = listOf(
+    LocalLicense(
+        "Shark（本项目）",
+        "项目自研代码",
+        "GPL-3.0",
+        "licenses/GPL-3.0.txt",
+        "https://www.gnu.org/licenses/gpl-3.0.html"
+    ),
+    LocalLicense(
+        "NOTICE",
+        "第三方来源、署名与声明",
+        "NOTICE",
+        "licenses/NOTICE.txt",
+        null
+    ),
+    LocalLicense(
+        "SUSFS guard / Hybrid Mount",
+        "随 App 分发的内核模块",
+        "GPL-2.0",
+        "licenses/GPL-2.0.txt",
+        "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html"
+    ),
+    LocalLicense(
+        "Stellar 修改部分",
+        "MPL-2.0 覆盖的 Stellar 代码",
+        "MPL-2.0",
+        "licenses/MPL-2.0.txt",
+        "https://www.mozilla.org/MPL/2.0/"
+    ),
+    LocalLicense(
+        "AzirX1337 CVE-2026-98260",
+        "MIT 许可的参考实现",
+        "MIT",
+        "licenses/MIT.txt",
+        "https://github.com/AzirX1337/CVE-2026-98260-OnePlus16-PYB110-Jailbreak"
+    ),
+    LocalLicense(
+        "COUI / Shizuku / androidx",
+        "Apache-2.0 许可的组件",
+        "Apache-2.0",
+        "licenses/Apache-2.0.txt",
+        "https://www.apache.org/licenses/LICENSE-2.0"
+    ),
+)
+
+private fun Library.toLicenseItem(): LicenseItem = LicenseItem(
+    name = name,
+    version = artifactVersion,
+    author = developers.joinToString(", ") { it.name.orEmpty() }
+        .ifBlank { organization?.name.orEmpty() },
+    website = website,
+    licenses = licenses.map { LicenseText(it.name, it.url, it.licenseContent) },
+)
+
+private enum class AboutPage { HOME, LICENSES }
 
 class MainActivity : ComponentActivity() {
     private val logs = mutableStateListOf<String>()
@@ -245,6 +341,8 @@ class MainActivity : ComponentActivity() {
                     LogScreen(state = logs.toList(), backdrop = appBackdrop)
                 } else if (t == AppTab.HISTORY) {
                     HistoryScreen(backdrop = appBackdrop)
+                } else if (t == AppTab.ABOUT) {
+                    AboutScreen(backdrop = appBackdrop)
                 } else {
                     val scrollBehavior = COUIScrollBehavior()
                     Scaffold(
@@ -550,6 +648,516 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    @Composable
+    private fun AboutScreen(backdrop: LayerBackdrop?) {
+        var page by remember { mutableStateOf(AboutPage.HOME) }
+        var selected by remember { mutableStateOf<LicenseItem?>(null) }
+        BackHandler(enabled = selected != null || page == AboutPage.LICENSES) {
+            if (selected != null) selected = null else page = AboutPage.HOME
+        }
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                if (targetState == AboutPage.LICENSES) {
+                    (slideInHorizontally(tween(240)) { it } + fadeIn(tween(240))) togetherWith
+                        (slideOutHorizontally(tween(240)) { -it / 4 } + fadeOut(tween(240)))
+                } else {
+                    (slideInHorizontally(tween(240)) { -it / 4 } + fadeIn(tween(240))) togetherWith
+                        (slideOutHorizontally(tween(240)) { it } + fadeOut(tween(240)))
+                }
+            },
+            label = "aboutPage"
+        ) { current ->
+            if (current == AboutPage.HOME) {
+                AboutHomeScreen(backdrop) { page = AboutPage.LICENSES }
+            } else {
+                LicenseListScreen(
+                    backdrop = backdrop,
+                    onBack = { page = AboutPage.HOME },
+                    onSelect = { selected = it }
+                )
+            }
+        }
+        LicenseDetailDialog(selected, onDismiss = { selected = null })
+    }
+
+    @Composable
+    private fun AboutHomeScreen(backdrop: LayerBackdrop?, onLicenses: () -> Unit) {
+        val uriHandler = LocalUriHandler.current
+        var showDonate by remember { mutableStateOf(false) }
+        Scaffold(
+            contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top),
+            topBar = {
+                BlurredBar(backdrop = backdrop) {
+                    TopAppBar(title = "关于", color = Color.Transparent)
+                }
+            },
+            popupHost = { }
+        ) { inner ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = inner.calculateTopPadding() + 12.dp,
+                        start = 12.dp,
+                        end = 12.dp,
+                        bottom = 12.dp + 100.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color.White),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.mipmap.ic_launcher_foreground),
+                                        contentDescription = "Shark",
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(6.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "Shark",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                                    fontSize = 13.sp,
+                                    color = COUITheme.colorScheme.onSurfaceVariantSummary
+                                )
+                            }
+                        }
+                    }
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onLicenses)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Info,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = COUITheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "App 图标由本项目绘制；第三方组件版权归各自作者所有，完整许可见「开放源代码许可」。",
+                                    fontSize = 13.sp,
+                                    color = COUITheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                    item {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column {
+                                ArrowPreference(
+                                    title = "查看源代码",
+                                    summary = "在 GitHub 上查看源代码",
+                                    onClick = { uriHandler.openUri(PROJECT_URL) },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Code,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                ArrowPreference(
+                                    title = "加入社区",
+                                    summary = "加入 QQ 群",
+                                    onClick = { uriHandler.openUri("https://qm.qq.com/q/HMg4ngAC8W") },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Group,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                ArrowPreference(
+                                    title = "问题反馈",
+                                    summary = "在 GitHub Issues 提交问题",
+                                    onClick = { uriHandler.openUri("$PROJECT_URL/issues") },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.BugReport,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                ArrowPreference(
+                                    title = "支持开发者",
+                                    summary = "微信 / 支付宝赞赏二维码",
+                                    onClick = { showDonate = true },
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Favorite,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                ArrowPreference(
+                                    title = "开放源代码许可",
+                                    summary = "查看本应用所使用的第三方开源库及其许可证信息",
+                                    onClick = onLicenses,
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Copyright,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        DonateDialog(show = showDonate, onDismiss = { showDonate = false })
+    }
+
+    @Composable
+    private fun DonateDialog(show: Boolean, onDismiss: () -> Unit) {
+        OverlayDialog(
+            show = show,
+            title = "支持开发者",
+            onDismissRequest = onDismiss,
+            content = {
+                Column(
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        DonateQr(
+                            label = "微信赞赏",
+                            assetPath = "donate/wechat.png",
+                            modifier = Modifier.weight(1f)
+                        )
+                        DonateQr(
+                            label = "支付宝",
+                            assetPath = "donate/alipay.png",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = "关闭",
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                }
+            }
+        )
+    }
+
+    @Composable
+    private fun DonateQr(label: String, assetPath: String, modifier: Modifier = Modifier) {
+        val context = LocalContext.current
+        val bitmap = remember(assetPath) {
+            runCatching {
+                context.assets.open(assetPath).use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
+            }.getOrNull()
+        }
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = label,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            }
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                color = COUITheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+    }
+
+    @Composable
+    private fun LicenseListScreen(
+        backdrop: LayerBackdrop?,
+        onBack: () -> Unit,
+        onSelect: (LicenseItem) -> Unit
+    ) {
+        val context = LocalContext.current
+        val libs by produceState(initialValue = Libs(emptyList(), emptySet()), context) {
+            value = withContext(Dispatchers.IO) {
+                runCatching {
+                    val json = context.resources
+                        .openRawResource(R.raw.aboutlibraries)
+                        .bufferedReader()
+                        .use { it.readText() }
+                    Libs.Builder().withJson(json).build()
+                }.getOrElse { Libs(emptyList(), emptySet()) }
+            }
+        }
+        val localItems = remember {
+            localLicenses.map { entry ->
+                LicenseItem(
+                    name = entry.title,
+                    author = entry.summary,
+                    website = entry.url,
+                    licenses = listOf(
+                        LicenseText(entry.licenseName, entry.url, asset = entry.asset)
+                    )
+                )
+            }
+        }
+        val libraryItems = remember(libs) { libs.libraries.map { it.toLicenseItem() } }
+        Scaffold(
+            topBar = {
+                BlurredBar(backdrop = backdrop) {
+                    TopAppBar(
+                        title = "开放源代码许可",
+                        color = Color.Transparent,
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    imageVector = COUIIcons.Back,
+                                    contentDescription = "返回",
+                                    tint = COUITheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    )
+                }
+            },
+            popupHost = { }
+        ) { inner ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = inner.calculateTopPadding() + 12.dp,
+                        start = 12.dp,
+                        end = 12.dp,
+                        bottom = 12.dp + 100.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item { SectionLabel("本项目与附加组件") }
+                    items(localItems) { item ->
+                        LicenseCard(item) { onSelect(item) }
+                    }
+                    item {
+                        SectionLabel(
+                            if (libraryItems.isEmpty()) "第三方依赖"
+                            else "第三方依赖（${libraryItems.size}）"
+                        )
+                    }
+                    items(libraryItems) { item ->
+                        LicenseCard(item) { onSelect(item) }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun SectionLabel(text: String) {
+        Text(
+            text = text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = COUITheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+        )
+    }
+
+    @Composable
+    private fun LicenseChip(text: String) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(COUITheme.colorScheme.secondaryContainer)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+            Text(
+                text = text,
+                fontSize = 11.sp,
+                color = COUITheme.colorScheme.onSecondaryContainer
+            )
+        }
+    }
+
+    @Composable
+    private fun LicenseCard(item: LicenseItem, onClick: () -> Unit) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = item.name,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    item.author?.takeIf { it.isNotBlank() }?.let {
+                        Text(
+                            text = it,
+                            fontSize = 13.sp,
+                            color = COUITheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
+                    if (item.licenses.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            item.licenses.take(3).forEach { LicenseChip(it.name) }
+                        }
+                    }
+                }
+                item.version?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = it,
+                        fontSize = 13.sp,
+                        color = COUITheme.colorScheme.onSurfaceVariantSummary
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun LicenseDetailDialog(item: LicenseItem?, onDismiss: () -> Unit) {
+        var lastItem by remember { mutableStateOf(item) }
+        if (item != null) lastItem = item
+        val display = lastItem ?: return
+        val context = LocalContext.current
+        val uriHandler = LocalUriHandler.current
+        val contents = remember(display) {
+            display.licenses.map { license ->
+                val text = license.content?.takeIf { it.isNotBlank() }
+                    ?: license.asset?.let { asset ->
+                        runCatching {
+                            context.assets.open(asset).bufferedReader().use { it.readText() }
+                        }.getOrNull()
+                    }
+                license to text
+            }
+        }
+        OverlayDialog(
+            show = item != null,
+            title = display.name,
+            onDismissRequest = onDismiss,
+            content = {
+                Column(
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+                ) {
+                    if (display.licenses.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            display.licenses.forEach { LicenseChip(it.name) }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    SelectionContainer(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            if (contents.isEmpty()) {
+                                Text("未声明许可证文本", fontSize = 13.sp)
+                            }
+                            contents.forEach { (license, body) ->
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = license.name,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = COUITheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = body ?: "未内置许可证文本",
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        display.website?.let { url ->
+                            TextButton(
+                                modifier = Modifier.weight(1f),
+                                text = "访问主页",
+                                onClick = { uriHandler.openUri(url) }
+                            )
+                        }
+                        TextButton(
+                            modifier = Modifier.weight(1f),
+                            text = "关闭",
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                    }
+                }
+            }
+        )
     }
 
     @Composable
@@ -1363,7 +1971,8 @@ class MainActivity : ComponentActivity() {
     private enum class AppTab(val label: String, val icon: ImageVector) {
         HOME("首页", Icons.Filled.Home),
         LOGS("日志", COUIIcons.Notes),
-        HISTORY("历史", Icons.Filled.History)
+        HISTORY("历史", Icons.Filled.History),
+        ABOUT("关于", Icons.Filled.Info)
     }
 
     private enum class ExploitKind(val fullLabel: String) {

@@ -9,6 +9,7 @@ val keystoreProps = Properties().apply {
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.mikepenz.aboutlibraries.plugin")
 }
 
 android {
@@ -69,6 +70,13 @@ android {
 }
 
 
+aboutLibraries {
+    library {
+        duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.MERGE
+        duplicationRule = com.mikepenz.aboutlibraries.plugin.DuplicateRule.SIMPLE
+    }
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.13.0")
@@ -81,6 +89,7 @@ dependencies {
     implementation("io.github.suqi8.coui.kmp:coui-icons-android:1.1.0")
     implementation("io.github.suqi8.coui.kmp:coui-preference-android:1.1.0")
     implementation("io.github.suqi8.coui.kmp:coui-blur-android:1.1.0")
+    implementation("com.mikepenz:aboutlibraries-core:15.2.0")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:aidl:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")

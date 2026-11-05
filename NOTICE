@@ -83,4 +83,11 @@ is distributed by this repository.
          "VFS 支持" switch is on). Import baseline and divergences are listed
          in lkm/hybridmount/PROVENANCE.
 
+10. AboutLibraries
+    Source: https://github.com/mikepenz/AboutLibraries
+    License: Apache-2.0
+    Used: Gradle plugin and core library that generate and parse the
+          dependency/license metadata shown on the in-app "开放源代码许可"
+          screen (com.mikepenz:aboutlibraries-core:15.2.0).
+
 The application icon is drawn by this project.

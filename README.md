@@ -20,7 +20,7 @@ OnePlus 16（PYB110）一键越狱工具。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（目标 6.12.69）**：Rust 单入口 `t61269`（内嵌 `YuKongA/CVE-2026-98260` `timer.c` 的本仓库改造版 `exploit/src/t61269_plant.c`）。v1.68 起与 6.18 全面对齐：**rootd / `t61269_su` / `run612.sh` 已删除**，进程内 preflight → UAF fake cred → cred 子进程一次性 `ksud late-load --kmi android16-6.12` 后 park，收尾由同一套并行 `finish_manager` 完成，失败出口/同 boot 重跑语义一致（差别见 6.12 小节）。旧链路曾在 PLZ110 用 SukiSU 41100 跑通；单入口版需在 6.12.69 设备复测。
 - **CVE-2026-98260-vivo-V2505A**：`vivo V2505A / PD2505`、`PD2505B_A_16.0.24.7.W10`、内核 `6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k` 的独立入口，Rust 单入口 `v2505a`（`exploit/src/t61269_plant.c` 以 `-DV2505A` 编入）。复现方法、常量、payload 校验和完整验证日志见 `ports/v2505a/README.md`；当前只在 KernelSU 上完成实机验证。UAF 阶段失败后由 holder 保留现场，同一 boot 可直接重试。
-- App 为底部三 tab（首页/日志/历史，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21（`gf957…` / `g7fcbff…` 两个 build）→6.18、6.12.69→6.12、精确匹配的 vivo V2505A 内核→V2505A），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享）；release 签名 APK v1.91 已构建（7,418,773 B，md5 `fa8f8b9958935dd37a9b7bc261139199`，sha256 `632a4836a6ce2c8e3b61d10b6dbc6daa6f050f8da6e07fe750033ee40c2254e3`）。
+- App 为底部四 tab（首页/日志/历史/关于，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21（`gf957…` / `g7fcbff…` 两个 build）→6.18、6.12.69→6.12、精确匹配的 vivo V2505A 内核→V2505A），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享），关于页显示版本、源代码 / 加入社区 / 问题反馈入口，以及 AboutLibraries 生成的依赖清单与离线许可全文；release 签名 APK v1.91 已构建（7,418,773 B，md5 `fa8f8b9958935dd37a9b7bc261139199`，sha256 `632a4836a6ce2c8e3b61d10b6dbc6daa6f050f8da6e07fe750033ee40c2254e3`）。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
 - **内置范围**：三条链都以 jniLibs 原生库形式内置（`libt98260.so` / `libt61269.so` / `libv2505a.so` / `libsusfs_guard_lkm.so` / `libsusfs_guard_lkm_612.so` / `libhybridmount.so`），从 `nativeLibraryDir` 原地执行；assets 只保留 `manual.md`，不再放设备端文件。**不内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
@@ -108,9 +108,9 @@ OnePlus 16（PYB110）一键越狱工具。
 OnePlus16-Jailbreak/
 ├── app/                         Android App（Gradle 工程根）
 │   ├── app/                     :app 模块（Kotlin/Compose/COUI/Shizuku）
-│   │   ├── src/main/java/com/pyb110/onekey/MainActivity.kt  三 tab（首页/日志/历史）与流程调度
+│   │   ├── src/main/java/com/pyb110/onekey/MainActivity.kt  四 tab（首页/日志/历史/关于）与流程调度
 │   │   ├── src/main/java/com/pyb110/onekey/HistoryStore.kt  历史日志落盘（每次运行一个文件）
-│   │   ├── src/main/assets/      使用手册 manual.md（无设备端文件）
+│   │   ├── src/main/assets/      manual.md + licenses/（GPL-3.0 / NOTICE / Apache-2.0 / MIT / GPL-2.0 / MPL-2.0 全文）
 │   │   ├── src/main/jniLibs/arm64-v8a/  libt98260 / libt61269 / libv2505a / libsusfs(×2) / libhybridmount
 │   │   ├── src/main/res/        自绘图标与资源
 │   │   ├── build.gradle.kts     签名配置 + R8
@@ -174,6 +174,7 @@ keytool -genkeypair -v -keystore keystore/release.jks -alias oneplus16 \
 - `libsusfs_guard_lkm.so` / `libsusfs_guard_lkm_612.so`：SUSFS guard LKM（6.18 / 6.12），原地 `ksud insmod`；
 - `libhybridmount.so`：Hybrid Mount VFS provider（6.18）；
 - 不部署 ksud：运行时从已安装管理器 APK 的 `lib/arm64` 原地执行。
+- **开源许可**：AboutLibraries 15.2.0 在构建时生成依赖清单（`R.raw.aboutlibraries`），关于页按库展示版本与许可证并打开详情对话框；`assets/licenses/` 另内置本项目 GPL-3.0、NOTICE 及 Apache-2.0 / MIT / GPL-2.0 / MPL-2.0 全文，供离线查看。关于页同时提供源码仓库、QQ 群与 Issues 入口。
 
 不再打包 KernelSU 的 `ksu-base*.ko`、`syms.txt`、`prep_*`、`forker`、`take_slide.sh` 和 64560 的任何二进制。
 
