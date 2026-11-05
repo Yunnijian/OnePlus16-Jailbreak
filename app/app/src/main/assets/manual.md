@@ -35,7 +35,7 @@ V2505A 使用独立的单入口二进制 `libv2505a`（同一份 C plant 以 `-D
 - **历史**：每次运行保存一个 `.log`；点开看全文，左滑条目露出「导出」按钮，可分享给其他应用。
 - **关于**：版本号、检查更新、源代码 / 加入社区 / 问题反馈入口，以及由 AboutLibraries 生成的依赖清单（按库显示版本与许可证，点开可看详情）和随 APK 离线内置的开源许可全文（GPL-3.0、NOTICE、Apache-2.0、MIT、GPL-2.0、MPL-2.0）。
 - **拓展功能 → Droidspaces 支持**（仅 6.18.21）：点「下载模块」会获取 GitHub 上 `Droidspaces-LKM` 的最新 release，确认后下载模块 zip；文件保存到 `Download/Shark/`，之后到 KernelSU 管理器「模块 → 安装」选择该文件刷入。模块不内置在 APK 中。
-- **ROOT 管理器 → Dynamic Switching**（仅 6.18.21）：选中后首次干净 boot 运行一次，由 `libksud_universal.so` 加载通用 KSU LKM（初始 KernelSU）。加载后拓展页顶部出现「管理器热切换」卡片，可在 KernelSU / KernelSU-Next / BakaSU / SukiSU / FinaSU 间切换，无需重启或重新越狱；切换后重新打开目标管理器 App。
+- **ROOT 管理器 → Dynamic Switching**（6.18.21 / 6.12.69）：选中后首次干净 boot 运行一次，由 `libksud_universal.so` 加载通用 KSU LKM（初始 KernelSU，内嵌 6.18/6.12 双 KMI KO）。加载后拓展功能出现「管理器热切换」项，可在 KernelSU / KernelSU-Next / BakaSU / SukiSU / FinaSU 间切换，无需重启或重新越狱；切换后重新打开目标管理器 App。
 
 ## 异常处理
 

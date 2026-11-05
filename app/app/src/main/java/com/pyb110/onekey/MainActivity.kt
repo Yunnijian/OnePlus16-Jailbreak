@@ -437,7 +437,7 @@ class MainActivity : ComponentActivity() {
             kernelVersion.contains("6.12.69") -> ExploitKind.CVE61269
             else -> ExploitKind.CVE98260
         }
-        if (manager == ManagerKind.DYNAMIC && exploit != ExploitKind.CVE98260) {
+        if (manager == ManagerKind.DYNAMIC && !supportsUniversal()) {
             manager = ManagerKind.KERNELSU
         }
         dynamicSwitching = manager == ManagerKind.DYNAMIC
@@ -953,7 +953,7 @@ class MainActivity : ComponentActivity() {
         BackHandler(onBack = onBack)
         val backdrop = rememberAppBackdrop()
         LaunchedEffect(exploit) {
-            if (exploit != ExploitKind.CVE98260) {
+            if (!supportsUniversal()) {
                 universalLoaded = false
                 return@LaunchedEffect
             }
@@ -1077,7 +1077,9 @@ class MainActivity : ComponentActivity() {
                                             )
                                         }
                                     )
-                                    if (universalLoaded) {
+
+                                }
+                                if (supportsUniversal() && universalLoaded) {
                                         HorizontalDivider()
                                         WindowDropdownPreference(
                                             title = "管理器热切换",
@@ -1104,7 +1106,7 @@ class MainActivity : ComponentActivity() {
                                                 color = Color(0xFFD32F2F)
                                             )
                                         }
-                                    }
+                                    
                                 }
                             }
                         }
@@ -2519,7 +2521,7 @@ class MainActivity : ComponentActivity() {
         } else {
             "${applicationInfo.nativeLibraryDir}/libsusfs_guard_lkm.so"
         }
-        val universal = dynamicSwitching && exploit == ExploitKind.CVE98260
+        val universal = dynamicSwitching && supportsUniversal()
         val initialManager = if (manager == ManagerKind.DYNAMIC) ManagerKind.KERNELSU else manager
         val env = shizukuEnv() + "PYB110_DIR=$dir" + "PYB110_MANAGER=${initialManager.manager}" +
             "PYB110_LATE_LOAD=1" +
@@ -2586,8 +2588,11 @@ class MainActivity : ComponentActivity() {
         DYNAMIC("Dynamic Switching", "me.weishu.kernelsu", "kernelsu")
     }
 
+    private fun supportsUniversal(): Boolean =
+        exploit == ExploitKind.CVE98260 || exploit == ExploitKind.CVE61269
+
     private fun managerChoices(): List<ManagerKind> =
-        if (exploit == ExploitKind.CVE98260) ManagerKind.entries
+        if (supportsUniversal()) ManagerKind.entries
         else ManagerKind.entries.filter { it != ManagerKind.DYNAMIC }
 
     private fun hotManagerChoices(): List<ManagerKind> =

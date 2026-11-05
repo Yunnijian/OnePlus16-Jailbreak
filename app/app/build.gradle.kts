@@ -24,8 +24,8 @@ android {
         applicationId = "com.pyb110.onekey"
         minSdk = 33
         targetSdk = 37
-        versionCode = 87
-        versionName = "1.97"
+        versionCode = 88
+        versionName = "1.98"
         ndk {
             abiFilters.add("arm64-v8a")
         }
