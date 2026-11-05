@@ -3,9 +3,12 @@ package com.pyb110.onekey
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
@@ -71,6 +74,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveModerator
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
@@ -257,6 +261,20 @@ class MainActivity : ComponentActivity() {
     private var historyEntries by mutableStateOf(listOf<HistoryEntry>())
     private var historyDetail by mutableStateOf<HistoryEntry?>(null)
     private var historyDetailText by mutableStateOf("")
+    private var pendingUpdate by mutableStateOf<UpdateInfo?>(null)
+    private var updateDialogVisible by mutableStateOf(false)
+    private var updateDownloading by mutableStateOf(false)
+    private var updateProgress by mutableStateOf(0f)
+    private var updateError by mutableStateOf<String?>(null)
+    private var pendingApk by mutableStateOf<File?>(null)
+    private var updateCheckedThisForeground = false
+    private var droidspacesDialogVisible by mutableStateOf(false)
+    private var droidspacesLoading by mutableStateOf(false)
+    private var droidspacesRelease by mutableStateOf<DroidspacesRelease?>(null)
+    private var droidspacesDownloading by mutableStateOf(false)
+    private var droidspacesProgress by mutableStateOf(0f)
+    private var droidspacesError by mutableStateOf<String?>(null)
+    private var droidspacesSavedPath by mutableStateOf<String?>(null)
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { code, result ->
         if (code == REQ_SHIZUKU) onPermissionResult(result == PackageManager.PERMISSION_GRANTED)
@@ -279,6 +297,104 @@ class MainActivity : ComponentActivity() {
         authorized = ok
         addLog(if (ok) "${PrivService.pick()?.label ?: "Backend"} authorized" else "permission denied")
         if (ok) refreshKsuAsync()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (updateCheckedThisForeground) return
+        updateCheckedThisForeground = true
+        if (updateDialogVisible || updateDownloading) return
+        lifecycleScope.launch {
+            when (val result = runCatching {
+                UpdateChecker.check(applicationContext)
+            }.getOrNull()) {
+                is UpdateCheckResult.Available -> {
+                    if (!updateDialogVisible) {
+                        pendingUpdate = result.info
+                        pendingApk = null
+                        updateError = null
+                        updateDialogVisible = true
+                    }
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    private fun checkForUpdatesManually() {
+        if (updateDownloading) return
+        Toast.makeText(this, "正在检查更新…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            when (val result = runCatching {
+                UpdateChecker.check(applicationContext)
+            }.getOrNull()) {
+                is UpdateCheckResult.Available -> {
+                    pendingUpdate = result.info
+                    pendingApk = null
+                    updateError = null
+                    updateDialogVisible = true
+                }
+                UpdateCheckResult.UpToDate -> {
+                    Toast.makeText(this@MainActivity, "已是最新版本", Toast.LENGTH_SHORT).show()
+                }
+                else -> {
+                    Toast.makeText(this@MainActivity, "检查更新失败，请稍后重试", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun openDroidspacesDialog() {
+        if (droidspacesDownloading) return
+        droidspacesDialogVisible = true
+        droidspacesRelease = null
+        droidspacesSavedPath = null
+        droidspacesError = null
+        loadDroidspacesRelease()
+    }
+
+    private fun loadDroidspacesRelease() {
+        droidspacesLoading = true
+        droidspacesError = null
+        lifecycleScope.launch {
+            runCatching { DroidspacesModule.latest() }
+                .onSuccess { droidspacesRelease = it }
+                .onFailure {
+                    droidspacesError = it.message ?: "获取最新 release 失败"
+                }
+            droidspacesLoading = false
+        }
+    }
+
+    private fun downloadDroidspacesModule() {
+        val release = droidspacesRelease ?: return
+        if (droidspacesDownloading) return
+        droidspacesDownloading = true
+        droidspacesProgress = 0f
+        droidspacesError = null
+        lifecycleScope.launch {
+            runCatching {
+                DroidspacesModule.download(applicationContext, release) { progress ->
+                    droidspacesProgress = progress
+                }
+            }.onSuccess {
+                droidspacesSavedPath = it
+            }.onFailure {
+                droidspacesError = it.message ?: "下载失败"
+            }
+            droidspacesDownloading = false
+        }
+    }
+
+    private fun formatSize(bytes: Long): String = when {
+        bytes <= 0 -> "未知大小"
+        bytes >= 1024 * 1024 -> "%.2f MB".format(bytes / 1024.0 / 1024.0)
+        else -> "%.0f KB".format(bytes / 1024.0)
+    }
+
+    override fun onStop() {
+        updateCheckedThisForeground = false
+        super.onStop()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -487,9 +603,302 @@ class MainActivity : ComponentActivity() {
                             ExtrasScreen(onBack = { showExtras = false })
                         }
                     }
+                    UpdateDialog()
+                    DroidspacesDialog()
                 }
                 }
             }
+        }
+    }
+
+    @Composable
+    private fun DroidspacesDialog() {
+        val release = droidspacesRelease
+        val savedPath = droidspacesSavedPath
+        OverlayDialog(
+            show = droidspacesDialogVisible,
+            title = "Droidspaces 模块",
+            onDismissRequest = {
+                if (!droidspacesDownloading) droidspacesDialogVisible = false
+            },
+            content = {
+                Column(
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+                ) {
+                    if (droidspacesLoading) {
+                        Text(text = "正在获取最新 release…", fontSize = 13.sp)
+                    } else if (release == null) {
+                        Text(
+                            text = droidspacesError ?: "获取最新 release 失败",
+                            fontSize = 13.sp
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(
+                                modifier = Modifier.weight(1f),
+                                text = "重试",
+                                onClick = { loadDroidspacesRelease() }
+                            )
+                            TextButton(
+                                modifier = Modifier.weight(1f),
+                                text = "关闭",
+                                onClick = { droidspacesDialogVisible = false },
+                                colors = ButtonDefaults.textButtonColorsPrimary()
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "最新版本 ${release.version}",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${release.assetName} · ${formatSize(release.assetSize)}",
+                            fontSize = 12.sp,
+                            color = COUITheme.colorScheme.onSurfaceVariantSummary
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        if (savedPath == null) {
+                            SelectionContainer(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                Text(
+                                    text = release.changelog.ifBlank { "无更新说明" },
+                                    fontSize = 13.sp
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "已保存到：",
+                                fontSize = 12.sp,
+                                color = COUITheme.colorScheme.onSurfaceVariantSummary
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            SelectionContainer {
+                                Text(
+                                    text = savedPath,
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "请到 KernelSU 管理器 → 模块 → 安装，选择该文件刷入。",
+                                fontSize = 13.sp
+                            )
+                        }
+                        droidspacesError?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = it,
+                                fontSize = 12.sp,
+                                color = Color(0xFFD32F2F)
+                            )
+                        }
+                        if (droidspacesDownloading) {
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "正在下载 ${(droidspacesProgress * 100).toInt()}%",
+                                fontSize = 13.sp
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(
+                                        COUITheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                    )
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(droidspacesProgress.coerceIn(0f, 1f))
+                                        .fillMaxHeight()
+                                        .background(COUITheme.colorScheme.primary)
+                                )
+                            }
+                        } else {
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (savedPath != null) {
+                                    TextButton(
+                                        modifier = Modifier.weight(1f),
+                                        text = "打开 KernelSU",
+                                        onClick = {
+                                            droidspacesDialogVisible = false
+                                            launchManager()
+                                        }
+                                    )
+                                    TextButton(
+                                        modifier = Modifier.weight(1f),
+                                        text = "关闭",
+                                        onClick = { droidspacesDialogVisible = false },
+                                        colors = ButtonDefaults.textButtonColorsPrimary()
+                                    )
+                                } else {
+                                    TextButton(
+                                        modifier = Modifier.weight(1f),
+                                        text = "关闭",
+                                        onClick = { droidspacesDialogVisible = false }
+                                    )
+                                    TextButton(
+                                        modifier = Modifier.weight(1f),
+                                        text = "下载",
+                                        onClick = { downloadDroidspacesModule() },
+                                        colors = ButtonDefaults.textButtonColorsPrimary()
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    @Composable
+    private fun UpdateDialog() {
+        val info = pendingUpdate ?: return
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        val uriHandler = LocalUriHandler.current
+        OverlayDialog(
+            show = updateDialogVisible,
+            title = "发现新版本 ${info.version}",
+            onDismissRequest = { if (!updateDownloading) updateDialogVisible = false },
+            content = {
+                Column(
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+                ) {
+                    Text(
+                        text = "当前 ${BuildConfig.VERSION_NAME}  ·  来源 ${info.source}",
+                        fontSize = 12.sp,
+                        color = COUITheme.colorScheme.onSurfaceVariantSummary
+                    )
+                    if (updateDownloading) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "正在下载 ${(updateProgress * 100).toInt()}%",
+                            fontSize = 13.sp
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(COUITheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(updateProgress.coerceIn(0f, 1f))
+                                    .fillMaxHeight()
+                                    .background(COUITheme.colorScheme.primary)
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.height(12.dp))
+                        SelectionContainer(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            Text(
+                                text = info.changelog.ifBlank { "无更新说明" },
+                                fontSize = 13.sp
+                            )
+                        }
+                        updateError?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = it,
+                                fontSize = 12.sp,
+                                color = Color(0xFFD32F2F)
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(
+                                modifier = Modifier.weight(1f),
+                                text = "稍后",
+                                onClick = { updateDialogVisible = false }
+                            )
+                            TextButton(
+                                modifier = Modifier.weight(1f),
+                                text = if (pendingApk != null) "安装" else "立即更新",
+                                onClick = {
+                                    val ready = pendingApk
+                                    if (ready != null) {
+                                        if (installApk(ready)) updateDialogVisible = false
+                                        return@TextButton
+                                    }
+                                    updateDownloading = true
+                                    updateError = null
+                                    updateProgress = 0f
+                                    scope.launch {
+                                        val result = runCatching {
+                                            UpdateChecker.download(context, info) { p ->
+                                                updateProgress = p
+                                            }
+                                        }
+                                        updateDownloading = false
+                                        result.onSuccess { file ->
+                                            if (!UpdateChecker.verifySignature(context, file)) {
+                                                file.delete()
+                                                updateError = "安装包签名与当前应用不一致"
+                                            } else {
+                                                pendingApk = file
+                                                if (installApk(file)) updateDialogVisible = false
+                                            }
+                                        }.onFailure {
+                                            updateError = it.message ?: "下载失败"
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.textButtonColorsPrimary()
+                            )
+                        }
+                        if (updateError != null) {
+                            TextButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                text = "打开浏览器下载",
+                                onClick = { uriHandler.openUri(info.pageUrl) }
+                            )
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    private fun installApk(file: File): Boolean {
+        if (!packageManager.canRequestPackageInstalls()) {
+            Toast.makeText(this, "请允许安装未知应用后再次点击安装", Toast.LENGTH_LONG).show()
+            runCatching {
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+            }
+            return false
+        }
+        return runCatching {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            true
+        }.getOrElse {
+            updateError = "无法启动安装器：${it.message}"
+            false
         }
     }
 
@@ -645,6 +1054,32 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    if (exploit == ExploitKind.CVE98260) {
+                        item {
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "Droidspaces 支持",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "下载最新的 droidspaces_lkm 模块，保存到 Download/Shark，之后到 KernelSU 管理器刷入。",
+                                        fontSize = 13.sp,
+                                        color = COUITheme.colorScheme.onSurfaceVariantSummary
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    TextButton(
+                                        text = "下载模块",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = { openDroidspacesDialog() },
+                                        colors = ButtonDefaults.textButtonColorsPrimary()
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -671,7 +1106,11 @@ class MainActivity : ComponentActivity() {
             label = "aboutPage"
         ) { current ->
             if (current == AboutPage.HOME) {
-                AboutHomeScreen(backdrop) { page = AboutPage.LICENSES }
+                AboutHomeScreen(
+                    backdrop = backdrop,
+                    onLicenses = { page = AboutPage.LICENSES },
+                    onCheckUpdate = { checkForUpdatesManually() }
+                )
             } else {
                 LicenseListScreen(
                     backdrop = backdrop,
@@ -684,7 +1123,11 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun AboutHomeScreen(backdrop: LayerBackdrop?, onLicenses: () -> Unit) {
+    private fun AboutHomeScreen(
+        backdrop: LayerBackdrop?,
+        onLicenses: () -> Unit,
+        onCheckUpdate: () -> Unit
+    ) {
         val uriHandler = LocalUriHandler.current
         var showDonate by remember { mutableStateOf(false) }
         Scaffold(
@@ -813,6 +1256,20 @@ class MainActivity : ComponentActivity() {
                                     startAction = {
                                         Icon(
                                             imageVector = Icons.Filled.BugReport,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 6.dp),
+                                            tint = COUITheme.colorScheme.onBackground
+                                        )
+                                    }
+                                )
+                                HorizontalDivider()
+                                ArrowPreference(
+                                    title = "检查更新",
+                                    summary = "当前 v${BuildConfig.VERSION_NAME}",
+                                    onClick = onCheckUpdate,
+                                    startAction = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Refresh,
                                             contentDescription = null,
                                             modifier = Modifier.padding(end = 6.dp),
                                             tint = COUITheme.colorScheme.onBackground

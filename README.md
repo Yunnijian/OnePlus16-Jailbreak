@@ -20,7 +20,9 @@ OnePlus 16（PYB110）一键越狱工具。
 - **SukiSU Ultra（v4.3.0 最新）**：按 tag `v4.3.0`（HEAD `e67b14e6`）重编 LKM 545,040 B、ksud 7,858,624 B（uapi 6），管理器 41100；41068 与 4.3.0（41100-6）均真机验证通过。
 - **CVE-2026-98260-6.12（目标 6.12.69）**：Rust 单入口 `t61269`（内嵌 `YuKongA/CVE-2026-98260` `timer.c` 的本仓库改造版 `exploit/src/t61269_plant.c`）。v1.68 起与 6.18 全面对齐：**rootd / `t61269_su` / `run612.sh` 已删除**，进程内 preflight → UAF fake cred → cred 子进程一次性 `ksud late-load --kmi android16-6.12` 后 park，收尾由同一套并行 `finish_manager` 完成，失败出口/同 boot 重跑语义一致（差别见 6.12 小节）。旧链路曾在 PLZ110 用 SukiSU 41100 跑通；单入口版需在 6.12.69 设备复测。
 - **CVE-2026-98260-vivo-V2505A**：`vivo V2505A / PD2505`、`PD2505B_A_16.0.24.7.W10`、内核 `6.12.23-android16-5-g41f4cb1fa7c7-abogki465038634-4k` 的独立入口，Rust 单入口 `v2505a`（`exploit/src/t61269_plant.c` 以 `-DV2505A` 编入）。复现方法、常量、payload 校验和完整验证日志见 `ports/v2505a/README.md`；当前只在 KernelSU 上完成实机验证。UAF 阶段失败后由 holder 保留现场，同一 boot 可直接重试。
-- App 为底部四 tab（首页/日志/历史/关于，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21（`gf957…` / `g7fcbff…` 两个 build）→6.18、6.12.69→6.12、精确匹配的 vivo V2505A 内核→V2505A），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享），关于页显示版本、源代码 / 加入社区 / 问题反馈入口，以及 AboutLibraries 生成的依赖清单与离线许可全文；release 签名 APK v1.91 已构建（7,418,773 B，md5 `fa8f8b9958935dd37a9b7bc261139199`，sha256 `632a4836a6ce2c8e3b61d10b6dbc6daa6f050f8da6e07fe750033ee40c2254e3`）。
+- App 为底部四 tab（首页/日志/历史/关于，COUI `NavigationBar` 组件）：首页是分组设置（ROOT 管理器下拉 + 「拓展功能」与「使用手册」入口；漏洞链按内核自动选：6.18.21（`gf957…` / `g7fcbff…` 两个 build）→6.18、6.12.69→6.12、精确匹配的 vivo V2505A 内核→V2505A），日志页流式显示本次运行，历史页保存每次运行的完整日志（`filesDir/history/<时间戳>.log`，可查看/删除，左滑条目露出「导出」按钮，点击导出 .log 并调系统分享），关于页显示版本、源代码 / 加入社区 / 问题反馈入口，以及 AboutLibraries 生成的依赖清单与离线许可全文；release 签名 APK v1.95 已构建（7,178,415 B，md5 `affa32f727d770976fd7cd8e2f2d38c5`，sha256 `fe933c0216aa48b6defc44842ce2605733df6738f6fdbcb71c04037ede7835f0`）。
+- **在线更新**：每次进入 App 时检查 Gitee Releases（`puci1/Shark`，仅托管 APK、校验文件与发布说明）并优先下载；Gitee 不可用或无更新时回退 GitHub Releases。发现更高版本后弹窗，应用内下载并校验 SHA-256 与签名，再交系统安装器；关于页也提供手动「检查更新」。Gitee 仓库不包含源码，源码仍在本 GitHub 仓库。
+- **Droidspaces 支持（仅 6.18.21）**：拓展功能里的「下载模块」按钮从 GitHub `Yunnijian/Droidspaces-LKM` 的最新 release 获取 `droidspaces_lkm` 模块，保存到 `Download/Shark/`；App 不内置模块，下载后到 KernelSU 管理器刷入。
 - **授权后端**：Stellar（`roro2239/Stellar`，Shizuku 深度分支，SDK `com.github.roro2239:Stellar-API:1.0.3`）优先，Shizuku 兜底；Manifest 同时注册 `StellarProvider` 与 `ShizukuProvider`，运行时按 Stellar → Shizuku 顺序选可用后端，权限请求/`newProcess` 走选中后端。
 - **内置范围**：三条链都以 jniLibs 原生库形式内置（`libt98260.so` / `libt61269.so` / `libv2505a.so` / `libsusfs_guard_lkm.so` / `libsusfs_guard_lkm_612.so` / `libhybridmount.so`），从 `nativeLibraryDir` 原地执行；assets 只保留 `manual.md`，不再放设备端文件。**不内置 ksud**，运行时从已安装管理器 APK 的 `lib/arm64` 原地执行，因此**必须先安装所选管理器**。
 
@@ -278,7 +280,7 @@ cp target/aarch64-linux-android/release/t61269 ../../app/app/src/main/jniLibs/ar
 
 ## 校验和
 
-- release APK：`app/app/build/outputs/apk/release/app-release.apk`（v1.91）/ 7,418,773 B / md5 `fa8f8b9958935dd37a9b7bc261139199` / sha256 `632a4836a6ce2c8e3b61d10b6dbc6daa6f050f8da6e07fe750033ee40c2254e3`（本地构建产物，不入库）。
+- release APK：`app/app/build/outputs/apk/release/app-release.apk`（v1.95）/ 7,178,415 B / md5 `affa32f727d770976fd7cd8e2f2d38c5` / sha256 `fe933c0216aa48b6defc44842ce2605733df6738f6fdbcb71c04037ede7835f0`（本地构建产物，不入库；Gitee Releases 托管线上版本：https://gitee.com/puci1/Shark/releases）。
 - Hybrid Mount VFS provider LKM（6.18.21，jniLibs `libhybridmount.so`）：390,952 B / md5 `c1b55a8d5b9b0451391049fe7ea0b6bd` / sha256 `1a0802b09d1cf7460a45821e42b5474e0a48b3ee7b888eb7b8a2205f95159c73`。
 - SUSFS guard LKM：6.18 jniLibs `libsusfs_guard_lkm.so` 3,456,440 B / sha256 `4c944d3f84b386bb03c0aadb4527c4ec74c12fe511c5511884073160c3a88304`（未 strip）；6.12 jniLibs `libsusfs_guard_lkm_612.so` 3,258,016 B / sha256 `1f50330ad2597a527ea200dd7f2a5aa21c1b3eb5a845e176b9efbc3322266214`。
 - 管理器 LKM 构建产物参考（未随 App 分发）：KernelSU 382,232 B；Next 489,264 B；BakaSU 435,616 B；SukiSU 545,040 B；FinaSU 496,744 B（strip 后）。
