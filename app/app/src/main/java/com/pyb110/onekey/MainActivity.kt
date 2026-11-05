@@ -2379,12 +2379,23 @@ class MainActivity : ComponentActivity() {
             val uid = appInfo.uid
             val script = "printf '%s %u %s' '$pkg' $uid '$apk' > /proc/kernelsu_manager"
             val (rc, out) = runRootCommand(script, 20)
+            if (rc == 0) {
+                runRootCommand("am force-stop '$pkg'", 10)
+            }
             withContext(Dispatchers.Main) {
                 hotSwitchBusy = false
                 if (rc == 0) {
                     hotCurrent = kind
                     hotSwitchError = null
                     addLog("Hot switch -> ${kind.fullLabel} (rc=0)")
+                    val intent = packageManager.getLaunchIntentForPackage(pkg)
+                    if (intent != null) {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                        runCatching { startActivity(intent) }
+                            .onFailure { addLog("Failed to open ${kind.fullLabel}: $it") }
+                    } else {
+                        addLog("Manager launch entry not found: $pkg")
+                    }
                 } else {
                     hotSwitchError = "切换失败：rc=$rc ${out.take(120)}"
                     addLog("Hot switch -> ${kind.fullLabel} failed rc=$rc ${out.take(120)}")

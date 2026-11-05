@@ -94,7 +94,7 @@ profile-switch module described in entry 11.
 11. Universal KSU profile-switch loader (libksud_universal.so)
     Source: built from SukiSU Ultra v4.3.0-r1 (commit 0a4c3132)
             https://github.com/SukiSU-Ultra/SukiSU-Ultra
-    License: GPL-2.0 (full text: app/src/main/assets/licenses/GPL-2.0.txt)
+    License: GPL-3.0 (full text: app/src/main/assets/licenses/GPL-3.0.txt)
     Used: optional 6.18.21 late-load loader that embeds the universal LKM
           with KernelSU / KernelSU-Next / BakaSU / SukiSU / FinaSU profile
           tables. Local modifications and build steps are documented in the
