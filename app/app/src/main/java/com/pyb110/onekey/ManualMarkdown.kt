@@ -5,7 +5,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -14,22 +13,25 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.suqi8.coui.kmp.basic.Card
-import io.github.suqi8.coui.kmp.basic.CardDefaults
-import io.github.suqi8.coui.kmp.basic.HorizontalDivider
-import io.github.suqi8.coui.kmp.basic.Text
-import io.github.suqi8.coui.kmp.theme.COUITheme
+import com.itos.coui.layout.Divider
+import com.itos.coui.shape.CouiShape
+import com.itos.coui.text.CouiTextKind
+import com.itos.coui.text.rememberCouiTextStyle
+import com.itos.coui.theme.CouiTheme
 
 internal sealed interface MdBlock {
     data class Heading(val level: Int, val text: String) : MdBlock
@@ -185,67 +187,97 @@ internal fun markdownInline(text: String, codeBackground: Color): AnnotatedStrin
         }
     }
 
+/* COUI Text 只接受纯文本；带 SpanStyle 的 Markdown 片段使用 Foundation BasicText，
+ * 并复用 COUI 的排版角色与主题色。 */
+@Composable
+private fun MdText(
+    text: AnnotatedString,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    BasicText(
+        text = text,
+        modifier = modifier,
+        style = style.copy(color = color)
+    )
+}
+
 @Composable
 private fun MdHeading(block: MdBlock.Heading, codeBackground: Color) {
-    val color = COUITheme.colorScheme.onSurface
+    val scheme = CouiTheme.colorScheme
+    val body = rememberCouiTextStyle(CouiTextKind.Body)
     if (block.level == 1) {
         Column {
-            Text(
+            MdText(
                 text = markdownInline(block.text, codeBackground),
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
+                style = body.copy(
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 38.sp
+                ),
+                color = scheme.onSurface
             )
             Spacer(Modifier.height(8.dp))
-            HorizontalDivider(color = color.copy(alpha = 0.15f))
+            Divider(startIndent = 0.dp, endIndent = 0.dp, color = scheme.onSurface.copy(alpha = 0.15f))
         }
     } else {
-        Text(
+        MdText(
             text = markdownInline(block.text, codeBackground),
-            modifier = Modifier.padding(top = if (block.level == 2) 16.dp else 10.dp),
-            fontSize = if (block.level == 2) 22.sp else 18.sp,
-            fontWeight = if (block.level == 2) FontWeight.Bold else FontWeight.SemiBold,
-            color = color
+            style = body.copy(
+                fontSize = if (block.level == 2) 22.sp else 18.sp,
+                lineHeight = if (block.level == 2) 30.sp else 26.sp,
+                fontWeight = if (block.level == 2) FontWeight.Bold else FontWeight.SemiBold
+            ),
+            color = scheme.onSurface,
+            modifier = Modifier.padding(top = if (block.level == 2) 16.dp else 10.dp)
         )
     }
 }
 
 @Composable
 private fun MdCallout(block: MdBlock.Callout, codeBackground: Color) {
-    val accent = COUITheme.colorScheme.primary
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        insideMargin = PaddingValues(0.dp),
-        colors = CardDefaults.defaultColors(color = accent.copy(alpha = 0.08f))
+    val scheme = CouiTheme.colorScheme
+    val accent = scheme.accent
+    val body = rememberCouiTextStyle(CouiTextKind.Body)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CouiShape(12.dp, 2f))
+            .background(accent.copy(alpha = 0.08f))
+            .height(IntrinsicSize.Min)
     ) {
-        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(accent)
-            )
-            Text(
-                text = markdownInline(block.text, codeBackground),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                fontSize = 15.sp,
-                lineHeight = 24.sp,
-                color = COUITheme.colorScheme.onSurface
-            )
-        }
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .background(accent)
+        )
+        MdText(
+            text = markdownInline(block.text, codeBackground),
+            style = body.copy(lineHeight = 24.sp),
+            color = scheme.onSurface,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        )
     }
 }
 
 @Composable
 private fun MdCode(block: MdBlock.Code) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        insideMargin = PaddingValues(0.dp),
-        colors = CardDefaults.defaultColors(
-            color = COUITheme.colorScheme.onSurface.copy(alpha = 0.06f)
-        )
+    val scheme = CouiTheme.colorScheme
+    val codeStyle = rememberCouiTextStyle(CouiTextKind.Body).copy(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 13.sp,
+        lineHeight = 20.sp,
+        color = scheme.onSurface
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CouiShape(12.dp, 2f))
+            .background(scheme.onSurface.copy(alpha = 0.06f))
     ) {
         Box(
             modifier = Modifier
@@ -253,20 +285,16 @@ private fun MdCode(block: MdBlock.Code) {
                 .horizontalScroll(rememberScrollState())
                 .padding(12.dp)
         ) {
-            Text(
-                text = block.text,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-                lineHeight = 20.sp,
-                color = COUITheme.colorScheme.onSurface
-            )
+            BasicText(text = block.text, style = codeStyle)
         }
     }
 }
 
 @Composable
 private fun MdTable(block: MdBlock.Table, codeBackground: Color) {
-    val border = COUITheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val scheme = CouiTheme.colorScheme
+    val border = scheme.onSurface.copy(alpha = 0.12f)
+    val body = rememberCouiTextStyle(CouiTextKind.Body)
     val columnCount = maxOf(block.headers.size, block.rows.maxOfOrNull { it.size } ?: 0)
     val weights = (0 until columnCount).map { column ->
         val longest = (listOf(block.headers) + block.rows)
@@ -274,51 +302,50 @@ private fun MdTable(block: MdBlock.Table, codeBackground: Color) {
             .maxOfOrNull { it.length } ?: 6
         longest.coerceIn(8, 40).toFloat()
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        insideMargin = PaddingValues(0.dp),
-        colors = CardDefaults.defaultColors(
-            color = COUITheme.colorScheme.onSurface.copy(alpha = 0.03f)
-        )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CouiShape(12.dp, 2f))
+            .background(scheme.onSurface.copy(alpha = 0.03f))
     ) {
-        Column {
-            if (block.headers.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(COUITheme.colorScheme.onSurface.copy(alpha = 0.05f))
-                ) {
-                    block.headers.forEachIndexed { column, header ->
-                        Text(
-                            text = markdownInline(header, codeBackground),
-                            modifier = Modifier
-                                .weight(weights.getOrElse(column) { 1f })
-                                .padding(horizontal = 10.dp, vertical = 9.dp),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = COUITheme.colorScheme.onSurface
-                        )
-                    }
-                }
-                HorizontalDivider(color = border)
-            }
-            block.rows.forEachIndexed { rowIndex, row ->
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    row.forEachIndexed { column, cell ->
-                        Text(
-                            text = markdownInline(cell, codeBackground),
-                            modifier = Modifier
-                                .weight(weights.getOrElse(column) { 1f })
-                                .padding(horizontal = 10.dp, vertical = 9.dp),
+        if (block.headers.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(scheme.onSurface.copy(alpha = 0.05f))
+            ) {
+                block.headers.forEachIndexed { column, header ->
+                    MdText(
+                        text = markdownInline(header, codeBackground),
+                        style = body.copy(
                             fontSize = 14.sp,
                             lineHeight = 21.sp,
-                            color = COUITheme.colorScheme.onSurface
-                        )
-                    }
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = scheme.onSurface,
+                        modifier = Modifier
+                            .weight(weights.getOrElse(column) { 1f })
+                            .padding(horizontal = 10.dp, vertical = 9.dp)
+                    )
                 }
-                if (rowIndex != block.rows.lastIndex) {
-                    HorizontalDivider(color = border)
+            }
+            Divider(startIndent = 0.dp, endIndent = 0.dp, color = border)
+        }
+        block.rows.forEachIndexed { rowIndex, row ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                row.forEachIndexed { column, cell ->
+                    MdText(
+                        text = markdownInline(cell, codeBackground),
+                        style = body.copy(fontSize = 14.sp, lineHeight = 21.sp),
+                        color = scheme.onSurface,
+                        modifier = Modifier
+                            .weight(weights.getOrElse(column) { 1f })
+                            .padding(horizontal = 10.dp, vertical = 9.dp)
+                    )
                 }
+            }
+            if (rowIndex != block.rows.lastIndex) {
+                Divider(startIndent = 0.dp, endIndent = 0.dp, color = border)
             }
         }
     }
@@ -326,28 +353,26 @@ private fun MdTable(block: MdBlock.Table, codeBackground: Color) {
 
 @Composable
 internal fun MdBlockView(block: MdBlock, codeBackground: Color) {
+    val scheme = CouiTheme.colorScheme
+    val body = rememberCouiTextStyle(CouiTextKind.Body)
     when (block) {
         is MdBlock.Heading -> MdHeading(block, codeBackground)
-        is MdBlock.Paragraph -> Text(
+        is MdBlock.Paragraph -> MdText(
             text = markdownInline(block.text, codeBackground),
-            fontSize = 15.sp,
-            lineHeight = 24.sp,
-            color = COUITheme.colorScheme.onSurface
+            style = body.copy(lineHeight = 24.sp),
+            color = scheme.onSurface
         )
         is MdBlock.ListItem -> Row(modifier = Modifier.padding(start = 2.dp)) {
-            Text(
-                text = block.marker,
-                modifier = Modifier.width(24.dp),
-                fontSize = 15.sp,
-                lineHeight = 24.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = COUITheme.colorScheme.primary
+            MdText(
+                text = AnnotatedString(block.marker),
+                style = body.copy(lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),
+                color = scheme.accent,
+                modifier = Modifier.width(24.dp)
             )
-            Text(
+            MdText(
                 text = markdownInline(block.text, codeBackground),
-                fontSize = 15.sp,
-                lineHeight = 24.sp,
-                color = COUITheme.colorScheme.onSurface
+                style = body.copy(lineHeight = 24.sp),
+                color = scheme.onSurface
             )
         }
         is MdBlock.Callout -> MdCallout(block, codeBackground)

@@ -159,7 +159,7 @@ Shark/
 
 **技术栈**
 
-- App：Kotlin、Jetpack Compose、COUI、Shizuku / Stellar API。
+- App：Kotlin、Jetpack Compose、COUI-Kit、Shizuku / Stellar API。
 - 设备端：Rust + C，Android NDK arm64。
 - 内核侧：C / GPL-2.0 LKM；通用 KSU KO 在独立项目
   [KSU-Universal](https://github.com/Yunnijian/KSU-Universal)。
@@ -203,7 +203,7 @@ Shark 只内置编译好的 `libksud_universal.so`。
 - 通用 KSU LKM 基于 SukiSU Ultra，GPL-3.0。
 - SUSFS guard 和 Hybrid Mount 为 GPL-2.0。
 - CVE-2026-98260 设计参考 AzirX1337 的公开移植（MIT）。
-- UI 使用 COUI（Apache-2.0），远程执行使用 Shizuku API（Apache-2.0）。
+- UI 使用 COUI-Kit（MPL-2.0），远程执行使用 Shizuku API（Apache-2.0）。
 
 ## 发布
 
