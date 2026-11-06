@@ -1,4 +1,4 @@
-<h1 align="center">Shark</h1>
+<h1 align="center"><img src="docs/images/app-icon.png" width="56" height="56" align="absmiddle" alt="Shark"> Shark</h1>
 
 <p align="center"><b>多机型 Android 一键临时 Root 与管理器切换工具</b></p>
 
