@@ -35,7 +35,7 @@ object UpdateChecker {
     private const val GITEE_API =
         "https://gitee.com/api/v5/repos/puci1/Shark/releases/latest"
     private const val GITHUB_API =
-        "https://api.github.com/repos/Yunnijian/OnePlus16-Jailbreak/releases/latest"
+        "https://api.github.com/repos/Yunnijian/Shark/releases/latest"
     private const val USER_AGENT = "Shark-Updater"
 
     suspend fun check(context: Context): UpdateCheckResult = withContext(Dispatchers.IO) {
@@ -107,7 +107,7 @@ object UpdateChecker {
             ?: extractSha256(releaseBody)
         val pageUrl = json.optString("html_url").ifBlank {
             if (gitee) "https://gitee.com/puci1/Shark/releases"
-            else "https://github.com/Yunnijian/OnePlus16-Jailbreak/releases/tag/$tag"
+            else "https://github.com/Yunnijian/Shark/releases/tag/$tag"
         }
         return UpdateInfo(
             version = version,

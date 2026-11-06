@@ -3,7 +3,7 @@
 <p align="center"><b>多机型 Android 一键临时 Root 与管理器切换工具</b></p>
 
 <p align="center">
-  <a href="https://github.com/Yunnijian/OnePlus16-Jailbreak/releases/tag/v2.0"><img src="docs/badges/release.svg" alt="Release"></a>
+  <a href="https://github.com/Yunnijian/Shark/releases/tag/v2.0"><img src="docs/badges/release.svg" alt="Release"></a>
   <a href="LICENSE"><img src="docs/badges/license.svg" alt="License"></a>
   <img src="docs/badges/android.svg" alt="Android">
   <img src="docs/badges/kotlin.svg" alt="Kotlin">
@@ -115,7 +115,7 @@ LKM。这就是该管理器原生的 root 环境。
 Shark 由 Android App、设备端 exploit runner 和可选的内核模块组成。
 
 ```text
-OnePlus16-Jailbreak/
+Shark/
 ├── app/                         Android App（Gradle 工程）
 │   ├── app/src/main/java/com/pyb110/onekey/
 │   │   ├── MainActivity.kt      四个 tab、流程控制、管理器与拓展状态
@@ -207,10 +207,10 @@ Shark 只内置编译好的 `libksud_universal.so`。
 
 ## 发布
 
-- GitHub：https://github.com/Yunnijian/OnePlus16-Jailbreak/releases/tag/v2.0
+- GitHub：https://github.com/Yunnijian/Shark/releases/tag/v2.0
 - Gitee：https://gitee.com/puci1/Shark/releases/tag/v2.0
 - App：v2.0（90）
-- APK SHA-256：`9a55ed75d9097329e1e9f00a0980dffd718037f6bf15d323e50ea97d74512f91`
+- APK SHA-256：`29dabba7fe144593a057715b30ccf0f1aaf5295b12d2883381f62fa6b10d3e94`
 
 通用内核发布：
 

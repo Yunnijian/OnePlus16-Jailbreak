@@ -159,7 +159,7 @@ import io.github.suqi8.coui.kmp.theme.COUITheme
 import io.github.suqi8.coui.kmp.theme.ThemeController
 import io.github.suqi8.coui.kmp.utils.PressFeedbackType
 
-private const val PROJECT_URL = "https://github.com/Yunnijian/OnePlus16-Jailbreak"
+private const val PROJECT_URL = "https://github.com/Yunnijian/Shark"
 
 private data class LicenseText(
     val name: String,
