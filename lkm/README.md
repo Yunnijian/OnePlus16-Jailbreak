@@ -78,6 +78,5 @@ docker run --rm \
 
 - DDK 镜像内置 `KDIR=/opt/ddk/kdir/android17-6.18`（6.18.32）；必须 `-e KDIR=/work/kdir/android17-6.18` 显式覆盖，否则编出的 vermagic 是 6.18.32。使用本地 kdir 时还要把 GKI 源挂到其 Makefile 记录的路径（`/work/gki-6.18.21`）。
 - 不能只改 vermagic 复用其它 minor 版本的官方 ko；ABI/CFI 不匹配会在加载后崩溃。
-- 每次设备重启 KASLR slide 变化，ko 必须在设备端用 `prep_patch` 按当次 slide 重新写符号。
 - 模块加载参数只需 `allow_shell=1`；官方 / Next / BakaSU 都定义了该参数。
 - 管理器与 ksud 建议直接用官方 release / CI 产物，不要本地重复编译（管理器 debug 签名还会与旧 release 签名冲突）。
